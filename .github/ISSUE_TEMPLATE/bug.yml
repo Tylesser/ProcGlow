@@ -1,0 +1,44 @@
+name: Report a bug
+description: Something in Proc Glow doesn't work as it should.
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to tell us. A short description is fine; the more we know, the faster it gets fixed.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: Overpower was usable but its button didn't glow...
+    validations:
+      required: true
+  - type: dropdown
+    id: game
+    attributes:
+      label: Game version
+      description: Proc Glow is made for WoW Forever only.
+      options:
+        - WoW Forever
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Addon version
+      description: Shown in your addon manager (or the game's AddOns list).
+      placeholder: "1.0.0"
+  - type: textarea
+    id: error
+    attributes:
+      label: Lua error
+      description: "If the game showed an error, paste it here. Type /console scriptErrors 1 in chat to make errors show. For a proc that didn't light, the output of /procglow report helps too."
+      render: text
+  - type: textarea
+    id: addons
+    attributes:
+      label: Other addons
+      description: Other addons you use that might be involved, such as action bar or cooldown addons.

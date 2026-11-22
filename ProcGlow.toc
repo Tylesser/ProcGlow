@@ -1,0 +1,17 @@
+## Interface: 16001
+## Title: Tylesser - Proc Glow
+## Notes: Action buttons glow when an ability procs, with art beside your character and an optional sound. For WoW Forever.
+## Author: Tylesser
+## Version: @project-version@
+## SavedVariables: ProcGlowDB
+## IconTexture: Interface\AddOns\ProcGlow\Media\Icon
+## X-License: MIT
+## X-Curse-Project-ID: 1823551
+## X-Wago-ID: E6gzXDN1
+## X-Website: https://tylesser.com/procglow/
+
+Tylesser.lua
+Shim.lua
+ProcGlow.lua
+ProcArt.lua
+Options.lua
