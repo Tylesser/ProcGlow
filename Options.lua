@@ -74,11 +74,25 @@ local function OptionRow(parent, option, width)
         end)
         row.extra, after = extra, extra
       end
+      if option.button2 then -- (a second one: the art colour's Reset)
+        local extra2 = T.Button(row, 60, 22, option.button2.name)
+        extra2:SetPoint("LEFT", after, "RIGHT", 8, 0)
+        extra2:SetScript("OnClick", function()
+          option.button2.Click()
+        end)
+        row.extra2, after = extra2, extra2
+      end
       if option.preview then
         local holder = CreateFrame("Frame", nil, row)
         holder:SetSize(40, 40)
         holder:SetPoint("LEFT", after, "RIGHT", 16, 0)
-        option.preview(holder)
+        -- the preview frame is placed by the page (it came back unplaced and never showed: the user's screenshot,
+        -- 2026-11-24)
+        local ok, frame = pcall(option.preview, holder)
+        if ok and type(frame) == "table" and frame.SetPoint then
+          frame:SetPoint("CENTER", holder, "CENTER", 0, 0)
+        end
+        row.preview = ok and frame or nil
         row:SetHeight(math.max(ROW, option.rowHeight or ROW))
       end
       note:SetPoint("TOPLEFT", picker, "BOTTOMLEFT", 2, -2)
@@ -127,6 +141,9 @@ local function OptionRow(parent, option, width)
       row.picker:SetEnabled(enabled and true or false)
       if row.extra then
         row.extra:SetEnabled(enabled and true or false)
+      end
+      if row.extra2 then
+        row.extra2:SetEnabled(enabled and true or false)
       end
     end
     if row.value then

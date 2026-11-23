@@ -178,6 +178,37 @@ function UI.CloseButton(parent)
   return button
 end
 
+-- An edit box on the shared look (your own procs' buff and spell boxes).
+function UI.EditBox(parent, width, height)
+  local box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+  box:SetSize(width or 160, height or 22)
+  box:SetAutoFocus(false)
+  T.EditBox(box)
+  box:SetScript("OnEscapePressed", box.ClearFocus)
+  box:SetScript("OnEnterPressed", box.ClearFocus)
+  return box
+end
+
+-- Codex's fold arrow (Media/FoldArrow.tga, a smooth triangle pointing right, turned a quarter for "open"): the
+-- per-ability lists' headers.
+function UI.FoldArrow(parent)
+  local arrow = CreateFrame("Frame", nil, parent)
+  arrow:SetSize(9, 9)
+  arrow.icon = arrow:CreateTexture(nil, "ARTWORK")
+  arrow.icon:SetTexture(MEDIA .. "FoldArrow")
+  arrow.icon:SetSize(18, 18)
+  arrow.icon:SetPoint("CENTER")
+  arrow.icon:SetVertexColor(T.MUTED[1], T.MUTED[2], T.MUTED[3])
+  function arrow:SetOpen(open)
+    self.open = open and true or false
+    if self.icon.SetRotation then
+      self.icon:SetRotation(self.open and -math.pi / 2 or 0)
+    end
+  end
+  arrow:SetOpen(false)
+  return arrow
+end
+
 -- Codex's rounded themes don't exist here: everything square.
 function UI.Radius()
   return nil

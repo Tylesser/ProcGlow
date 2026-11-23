@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+- Proc art: **Top and bottom** as an Art side (also per ability): one proc's art above and below you, a second on the other edge, then left and right.
+- Proc glow, new options: **your own procs** (a buff of yours lights a spell on your bars, with art and sound like the others; pick both from a window of your buffs, gear, bag consumables by type and spells by spellbook tab, no spell IDs needed; in a fight track the buff in the cooldown manager), a **faint glow** while you can't cast the spell yet (no rage or mana, or its cooldown), a **glow style and colour per ability**, **stacking procs building up** (Heating Up and the seal echoes: the inner arc at one stack, both arcs at two, the symbol when the stacks are full), **Move the art** (also while Edit Mode is open), **art only in combat**, **Play** in the preview panel (the proc's art, glow and sound for a few seconds) and the **time between sounds**.
+- Proc sounds: the fourteen proc sounds are new, real recordings (blades, shield, axe, fanfare, choir, whispers, fire, chimes, lightning, ...) instead of the synthesised ones.
+- Proc glow options: the per-ability lists (sound, art side, art) show only your class's procs and fold up under a header, and a row lights up under the pointer. The art and side lists have a preview beside them: the art of the proc you point at (or last picked for) on its side. With the art per ability, each ability can also get a colour of its own (the square after its art; right-click goes back to the Art colour). The glow style's preview shows one of your class's buttons. The Art colour has a Reset button (back to each proc's own colour), and "Show all arts" follows colour changes while it is open. The glow style's preview shows on this page again.
+
 ## 1.1.1
 
 - Heating Up: the stack count now comes from Pyroblast's cast time (each stack takes 25 % off it), so a critical strike that gives two stacks at once is counted right, and Pyroblast lights at 3 stacks in combat even when Heating Up isn't tracked in the cooldown manager. `/procglow report` shows the reading.

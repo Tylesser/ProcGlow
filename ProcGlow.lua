@@ -32,26 +32,36 @@ local EACH_KEY, FOR_KEY = "procSoundEach", "procSoundFor"
 local STYLE_KEY, COLOR_KEY, SPEED_KEY, THICK_KEY = "procGlowStyle", "procGlowColor", "procGlowSpeed", "procGlowThickness"
 local CDM_KEY = "procGlowCDM"
 local GAME_KEY = "procGlowCDMGame" -- Codex's glow instead of the game's own alert on the cooldown manager
-P.SOUND_GAP = 1.5 -- seconds between two proc sounds, across all procs
+-- 2026-11-24 (the user's "do all" of the suggestion list): a faint glow while the spell can't be cast yet, a glow style
+-- and colour per ability, the gap between proc sounds, and your own procs (a buff of yours lights a spell)
+local DIM_KEY = "procGlowDim"
+local GLOW_EACH_KEY, GLOW_FOR_KEY, GLOW_COLOR_FOR_KEY = "procGlowEach", "procGlowStyleFor", "procGlowColorFor"
+local GAP_KEY = "procSoundGap"
+local CUSTOM_KEY = "procCustom" -- { { buff = name or spell ID, spell = name (or ID), class = class token } }
+P.SOUND_GAP = 1.5 -- seconds between two proc sounds, across all procs (the default of GAP_KEY)
+P.GAPS = { { 0.5, "Short (0.5 s)" }, { 1.5, "Normal (1.5 s)" }, { 3, "Long (3 s)" } }
+P.DIM = 0.35 -- a faint glow's strength
 P.PULSE = 0.5
 
--- Reactive abilities: usable = lit. IDs are every rank (Classic Era); names catch the rest.
+-- Reactive abilities: usable = lit. IDs are every rank (Classic Era); names catch the rest. class = whose
+-- per-ability lists show it (the glow itself doesn't check it).
 P.REACTIVE = {
-  { name = "Overpower", ids = { 7384, 7887, 11584, 11585 } },
-  { name = "Revenge", ids = { 6572, 6574, 7379, 11600, 11601, 25288 } },
-  { name = "Execute", ids = { 5308, 20658, 20660, 20661, 20662 } },
-  { name = "Victory Rush", ids = { 34428 } },
-  { name = "Riposte", ids = { 14251 } },
-  { name = "Counterattack", ids = { 19306, 20909, 20910 } },
-  { name = "Mongoose Bite", ids = { 1495, 14269, 14270, 14271 } },
-  { name = "Hammer of Wrath", ids = { 24275, 24274, 24239 } },
+  { name = "Overpower", ids = { 7384, 7887, 11584, 11585 }, class = "WARRIOR" },
+  { name = "Revenge", ids = { 6572, 6574, 7379, 11600, 11601, 25288 }, class = "WARRIOR" },
+  { name = "Execute", ids = { 5308, 20658, 20660, 20661, 20662 }, class = "WARRIOR" },
+  { name = "Victory Rush", ids = { 34428 }, class = "WARRIOR" },
+  { name = "Riposte", ids = { 14251 }, class = "ROGUE" },
+  { name = "Counterattack", ids = { 19306, 20909, 20910 }, class = "HUNTER" },
+  { name = "Mongoose Bite", ids = { 1495, 14269, 14270, 14271 }, class = "HUNTER" },
+  { name = "Hammer of Wrath", ids = { 24275, 24274, 24239 }, class = "PALADIN" },
 }
 
 -- Buff procs: while the buff is on you, these spells glow (class = only for that class; stacks = only from that many
 -- stacks of the buff; notActive = not a spell whose own buff is on you; artOnly = the art beside you and the sound,
--- no glow on the buttons: Clearcasting, the user's request 2026-11-22).
+-- no glow on the buttons: Clearcasting, the user's request 2026-11-22; listClass = only whose per-ability lists show
+-- it, the glow works for anyone with the buff).
 P.AURAS = {
-  { name = "Shadow Trance", ids = { 17941 }, spells = { "Shadow Bolt" },
+  { name = "Shadow Trance", ids = { 17941 }, spells = { "Shadow Bolt" }, listClass = "WARLOCK",
     spellIDs = { 686, 695, 705, 1088, 1106, 7641, 11659, 11660, 11661, 25307 } },
   { name = "Clearcasting", ids = { 12536 }, class = "MAGE", artOnly = true,
     spells = { "Arcane Missiles", "Arcane Explosion", "Blizzard", "Flamestrike" } },
@@ -93,9 +103,9 @@ end
 
 -- The sounds: { key, text, SOUNDKIT name, its ID, group }; the game's own (names and IDs from
 -- Blizzard_SharedXML/Mainline/SoundKitConstants.lua, the file Forever loads; the ID is used when SOUNDKIT lacks one),
--- and Codex's own (group "codex", `file` in Media/Sounds: made by branding/source/proc-sounds.py from sine waves and
--- noise, 2026-11-23: the user's "more suitable sounds for procs", then "more related to spells, not random sounds"),
--- played with PlaySoundFile. "match" plays each proc the sound made for it (P.PROC_SOUNDS).
+-- and Codex's own (group "codex", `file` in Media/Sounds: public-domain (CC0) recordings picked per name, trimmed and
+-- evened out, 2026-11-24, replacing ones synthesised on 2026-11-23 that the user found terrible; how they were made:
+-- the workspace's tools/sounds), played with PlaySoundFile. "match" plays each proc the sound made for it (P.PROC_SOUNDS).
 P.SOUNDS = {
   { "match", "Each proc's own sound", group = "codex" },
   { "sword_clash", "Blades clash", group = "codex", file = "sword_clash" },
@@ -136,7 +146,7 @@ local UPDATE_EVENTS = { "ACTION_USABLE_CHANGED", "ACTIONBAR_UPDATE_USABLE", "SPE
   "SPELL_UPDATE_COOLDOWN", -- the art waits for the spell's cooldown and the global cooldown (P.Castable)
   "PLAYER_TARGET_CHANGED", "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW", "SPELL_ACTIVATION_OVERLAY_GLOW_HIDE",
   "SPELL_ACTIVATION_OVERLAY_SHOW", "SPELL_ACTIVATION_OVERLAY_HIDE", "PLAYER_ENTERING_WORLD",
-  "PLAYER_REGEN_ENABLED" }
+  "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED" } -- (the art only in combat)
 local SCAN_EVENTS = { "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR",
   "UPDATE_OVERRIDE_ACTIONBAR", "UPDATE_SHAPESHIFT_FORM", "PLAYER_ENTERING_WORLD", "SPELLS_CHANGED" }
 
@@ -226,7 +236,14 @@ function P.Lookup()
   end
   local class = PlayerClass()
   P.auraNames, P.auraIDs = {}, {}
+  local all = {}
   for _, aura in ipairs(P.AURAS) do
+    all[#all + 1] = aura
+  end
+  for _, aura in ipairs(P.CustomAuras(class)) do
+    all[#all + 1] = aura
+  end
+  for _, aura in ipairs(all) do
     if not aura.class or aura.class == class then
       for _, id in ipairs(aura.ids) do
         P.auraIDs[id] = aura
@@ -254,6 +271,96 @@ function P.Lookup()
   end
   P.lookup = { byID = byID, byName = byName }
   return P.lookup
+end
+
+-- Your own procs (2026-11-24): each saved { buff, spell, class } as a buff proc like P.AURAS' (buff = a spell ID or a
+-- name; a name alone can't be matched by ID, so in a fight only an ID tracked in the cooldown manager works). The
+-- aura tables are kept per saved entry, so a lookup and the next update share them.
+P.customAuras = setmetatable({}, { __mode = "k" })
+
+local function Trim(text)
+  return type(text) == "string" and text:match("^%s*(.-)%s*$") or ""
+end
+
+function P.CustomAura(one)
+  if type(one) ~= "table" then
+    return nil
+  end
+  local buffID = Num(tonumber(one.buff))
+  local buff = buffID and (SpellName(buffID) or ("Spell " .. buffID)) or Str(type(one.buff) == "string" and Trim(one.buff))
+  local spellID = Num(tonumber(one.spell))
+  local spell = spellID and SpellName(spellID) or Str(type(one.spell) == "string" and Trim(one.spell))
+  if not buff or not spell then
+    return nil
+  end
+  local aura = P.customAuras[one] or {}
+  aura.name, aura.ids, aura.spells, aura.class, aura.custom = buff, { buffID }, { spell }, one.class, true
+  aura.spellIDs = spellID and { spellID } or nil
+  P.customAuras[one] = aura
+  return aura
+end
+
+-- The saved procs for a class (nil = all): { { index, one, aura } }.
+function P.CustomList(class)
+  local saved, list = Q.DB()[CUSTOM_KEY], {}
+  for index, one in ipairs(type(saved) == "table" and saved or {}) do
+    if type(one) == "table" and (not class or not one.class or one.class == class) then
+      local aura = P.CustomAura(one)
+      if aura then
+        list[#list + 1] = { index = index, one = one, aura = aura }
+      end
+    end
+  end
+  return list
+end
+
+function P.CustomAuras(class)
+  local list = {}
+  for _, entry in ipairs(P.CustomList(class)) do
+    list[#list + 1] = entry.aura
+  end
+  return list
+end
+
+function P.CustomChanged()
+  P.lookup = nil
+  if P.started then
+    P.Scan()
+  end
+  if Q.RefreshPage then
+    Q.RefreshPage()
+  end
+end
+
+-- Adds one for your class. Returns true, or false and why.
+-- A box's text: a spell ID, "Name (ID)" as the picker writes it (the ID), or a name.
+function P.BoxValue(text)
+  text = Trim(text)
+  return tonumber(text) or tonumber(text:match("%((%d+)%)$") or "") or text
+end
+
+function P.AddCustom(buff, spell)
+  buff, spell = Trim(buff), Trim(spell)
+  if buff == "" or spell == "" then
+    return false, "Fill in both: the buff and the spell it lights."
+  end
+  local db = Q.DB()
+  db[CUSTOM_KEY] = type(db[CUSTOM_KEY]) == "table" and db[CUSTOM_KEY] or {}
+  local spellValue = P.BoxValue(spell)
+  if type(spellValue) == "number" then
+    spellValue = SpellName(spellValue) or tostring(spellValue) -- (spells match by name: every rank)
+  end
+  table.insert(db[CUSTOM_KEY], { buff = P.BoxValue(buff), spell = spellValue, class = PlayerClass() })
+  P.CustomChanged()
+  return true
+end
+
+function P.RemoveCustom(index)
+  local saved = Q.DB()[CUSTOM_KEY]
+  if type(saved) == "table" and saved[index] then
+    table.remove(saved, index)
+    P.CustomChanged()
+  end
 end
 
 -- The spell on an action slot (a spell, or a macro that casts one), or nil.
@@ -569,6 +676,68 @@ function P.Color()
   end
   local theme = ns.InkTheme and ns.InkTheme() or ns.Theme and ns.Theme() or {} -- on the action bars: ink
   return theme.accent or FIXED.gold
+end
+
+-- A proc's own glow (with "Choose the glow per ability" on): its style ("same" or none = the main one) and colour.
+function P.StyleFor(key)
+  local db = Q.DB()
+  local own = db[GLOW_EACH_KEY] and key and type(db[GLOW_FOR_KEY]) == "table" and db[GLOW_FOR_KEY][key]
+  if own == "auto" then
+    return RestyledBars() and "border" or "alert"
+  end
+  for _, style in ipairs(P.STYLES) do
+    if own and own == style[1] then
+      return own
+    end
+  end
+  return P.Style()
+end
+
+function P.OwnGlowColor(key)
+  local db = Q.DB()
+  local list = db[GLOW_EACH_KEY] and key and db[GLOW_COLOR_FOR_KEY]
+  local c = type(list) == "table" and list[key]
+  if type(c) == "table" and Num(c[1]) and Num(c[2]) and Num(c[3]) then
+    return { c[1], c[2], c[3] }
+  end
+  return nil
+end
+
+function P.ColorFor(key)
+  return P.OwnGlowColor(key) or P.Color()
+end
+
+function P.SetGlowColor(key, color)
+  local db = Q.DB()
+  db[GLOW_COLOR_FOR_KEY] = type(db[GLOW_COLOR_FOR_KEY]) == "table" and db[GLOW_COLOR_FOR_KEY] or {}
+  db[GLOW_COLOR_FOR_KEY][key] = color and { color[1], color[2], color[3] } or nil
+  P.Repaint()
+  if Q.RefreshPage then
+    Q.RefreshPage()
+  end
+end
+
+-- The game's colour picker for one ability's glow; Cancel puts the old colour back.
+function P.PickGlowColor(key)
+  local picker = ColorPickerFrame
+  if type(picker) ~= "table" or type(picker.SetupColorPickerAndShow) ~= "function" then
+    return false
+  end
+  local had = P.OwnGlowColor(key)
+  local start = had or P.ColorFor(key)
+  picker:SetupColorPickerAndShow({
+    r = start[1], g = start[2], b = start[3], hasOpacity = false,
+    swatchFunc = function()
+      local r, g, b = picker:GetColorRGB()
+      if Num(r) and Num(g) and Num(b) then
+        P.SetGlowColor(key, { r, g, b })
+      end
+    end,
+    cancelFunc = function()
+      P.SetGlowColor(key, had)
+    end,
+  })
+  return true
 end
 
 -- The pulse time of one fade (seconds), from the speed setting.
@@ -1046,7 +1215,7 @@ local BUILD = { border = BorderGlow, ring = RingGlow, soft = SoftGlow, flash = F
 -- (the game's ants run round a square), the alert and the soft halo stay as they are.
 -- ":circle" (round cooldown icons) builds the circle variants: the alert falls back to the round border there, the
 -- sparkles run round a circle.
-function P.MakeGlow(button, key)
+function P.MakeGlow(button, key, proc)
   key = key or ""
   local style = key:gsub(":%a+$", "")
   local frame
@@ -1057,8 +1226,8 @@ function P.MakeGlow(button, key)
     else
       frame = (CIRCLE_BUILD[style] or CircleBorder)(button)
     end
-    frame.key = key
-    frame:Apply(P.Color(), P.Pulse(), P.Thickness())
+    frame.key, frame.proc = key, proc
+    frame:Apply(P.ColorFor(proc), P.Pulse(), P.Thickness())
     return frame
   end
   local radius
@@ -1073,25 +1242,48 @@ function P.MakeGlow(button, key)
     frame = BUILD[style](button, radius)
   end
   frame = frame or BorderGlow(button, radius)
-  frame.key = key
-  frame:Apply(P.Color(), P.Pulse(), P.Thickness())
+  frame.key, frame.proc = key, proc
+  frame:Apply(P.ColorFor(proc), P.Pulse(), P.Thickness())
   return frame
 end
 
--- The glow key in use: the style, with ":round" while the restyled action buttons have rounded corners.
-local function Wanted(target)
+-- The glow key in use: the style (the proc's own with the glow per ability), with ":round" while the restyled
+-- action buttons have rounded corners.
+local function Wanted(target, proc)
   if target and P.cdmItems[target] then
-    return P.Style() .. P.CDMShape()
+    return P.StyleFor(proc) .. P.CDMShape()
   end
-  return P.Style() .. (P.Rounded() and ":round" or "")
+  return P.StyleFor(proc) .. (P.Rounded() and ":round" or "")
 end
 P.Wanted = Wanted
 
--- Our glow frame for a button, in the current style (made again when the style or shape changed).
-function P.Glow(button)
-  local key = Wanted(button)
+-- A faint glow (P.DIM) while the spell can't be cast yet: our own glows pulse their frame's alpha, so the strength
+-- goes into their textures' colour alpha; the game's alert (no tinted textures) takes the frame's alpha.
+local function SetDim(glow, dim)
+  glow.dim = dim and true or false
+  local tinted = glow.tinted
+  if type(tinted) == "table" and #tinted > 0 then
+    local color = P.ColorFor(glow.proc)
+    for _, texture in ipairs(tinted) do
+      texture:SetVertexColor(color[1], color[2], color[3], (texture.codexAlpha or 1) * (dim and P.DIM or 1))
+    end
+  else
+    glow:SetAlpha(dim and P.DIM or 1)
+  end
+end
+P.SetDim = SetDim
+
+-- Our glow frame for a button, in the current style (made again when the style, the shape or, with the glow per
+-- ability, the proc's style changed).
+function P.Glow(button, proc)
+  local key = Wanted(button, proc)
   local glow = P.glows[button]
   if glow and glow.wanted == key then
+    if glow.proc ~= proc then
+      glow.proc = proc
+      glow:Apply(P.ColorFor(proc), P.Pulse(), P.Thickness())
+      SetDim(glow, glow.dim)
+    end
     return glow
   end
   local lit = glow and glow.lit
@@ -1099,7 +1291,7 @@ function P.Glow(button)
     glow.lit = false
     glow:Stop()
   end
-  local ok, made = pcall(P.MakeGlow, button, key)
+  local ok, made = pcall(P.MakeGlow, button, key, proc)
   if not ok then
     return nil
   end
@@ -1112,10 +1304,13 @@ function P.Glow(button)
   return made
 end
 
-local function SetGlow(button, on)
-  local glow = on and P.Glow(button) or P.glows[button]
+local function SetGlow(button, on, proc, dim)
+  local glow = on and P.Glow(button, proc) or P.glows[button]
   if not glow then
     return
+  end
+  if on and glow.dim ~= (dim and true or false) then
+    SetDim(glow, dim)
   end
   if on and not glow.lit then
     glow.lit = true
@@ -1129,16 +1324,21 @@ end
 -- After a style / colour / speed / thickness change: every glow (and the page's preview) at once.
 function P.Repaint()
   for button, glow in pairs(P.glows) do
-    if glow.wanted ~= Wanted(button) then
+    if glow.wanted ~= Wanted(button, glow.proc) then
       if glow.lit then
-        P.Glow(button)
+        local dim = glow.dim
+        SetDim(P.Glow(button, glow.proc) or glow, dim)
       end
     else
-      glow:Apply(P.Color(), P.Pulse(), P.Thickness())
+      glow:Apply(P.ColorFor(glow.proc), P.Pulse(), P.Thickness())
+      SetDim(glow, glow.dim)
     end
   end
   if P.preview then
     P.ShowPreview()
+  end
+  if P.art and P.art.PaintGallery then
+    P.art.PaintGallery()
   end
 end
 
@@ -1148,7 +1348,8 @@ function P.BuildPreview(parent)
   box:SetSize(36, 36)
   box.icon = box:CreateTexture(nil, "ARTWORK")
   box.icon:SetAllPoints(box)
-  box.icon:SetTexture("Interface\\Icons\\Ability_MeleeDamage")
+  -- the button of your class's first proc (2026-11-24), else a plain one
+  box.icon:SetTexture(P.ButtonIcon(P.ClassKeys()[1]) or "Interface\\Icons\\Ability_MeleeDamage")
   if box.icon.SetTexCoord then
     box.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
   end
@@ -1182,13 +1383,55 @@ function P.ShowPreview()
   end
 end
 
+-- The button a proc lights: a reactive ability's own, a buff's first spell (nil = none we can show).
+function P.ButtonIcon(name)
+  local function Icon(spell)
+    local get = C_Spell and C_Spell.GetSpellTexture
+    local ok, icon = false, nil
+    if type(get) == "function" and spell ~= nil then
+      ok, icon = pcall(get, spell)
+    end
+    return ok and Readable(icon) and icon ~= 0 and icon ~= "" and icon or nil
+  end
+  for _, entry in ipairs(P.REACTIVE) do
+    if entry.name == name then
+      return Icon(entry.ids[1]) or Icon(entry.name)
+    end
+  end
+  local class = PlayerClass()
+  for _, aura in ipairs(P.AURAS) do
+    if aura.name == name and (not aura.class or aura.class == class) then
+      return Icon(aura.spellIDs and aura.spellIDs[1]) or Icon(aura.spells and aura.spells[1])
+    end
+  end
+  for _, aura in ipairs(P.CustomAuras(class)) do
+    if aura.name == name then
+      return Icon(aura.spellIDs and aura.spellIDs[1]) or Icon(aura.spells[1])
+    end
+  end
+  return nil
+end
+
+
 -- Signals --------------------------------------------------------------------------------------------------------
 
 -- The player's buffs that make a listed spell glow: [aura] = true (with enough stacks where the entry asks for them),
 -- and active.names[lower name] = true for every buff (notActive entries skip a spell whose buff is on you). Secret
 -- buffs are skipped.
+-- active.counts[aura] = the stacks seen (a readable count, Heating Up's cast time, or in a fight the cooldown
+-- manager's counted ones), also below the needed ones: the art's build-up (2026-11-24). The cooldown manager's one
+-- "Unsealed Wrath" item stands for every echo: right after a seal change it may still show the old seal's echoes,
+-- so an echo's count isn't taken until that item changes or goes (P.sealChanged; a first step showed with no echo
+-- at all, the user's screenshot, Seal of Righteousness, 2026-11-24).
+local function Counted(active, match, count)
+  if match and count then
+    active.counts[match] = math.max(active.counts[match] or 0, count)
+  end
+end
+P.Counted = Counted
+
 function P.ActiveAuras()
-  local active = { names = {} }
+  local active = { names = {}, counts = {} }
   local read = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
   if type(read) ~= "function" then
     return active
@@ -1220,6 +1463,7 @@ function P.ActiveAuras()
         end
       else
         P.SeenStacks(match, Num(count) or 0)
+        Counted(active, match, Num(count) or 0)
         known[match] = true
         P.LearnCast(match, Num(count) or 0)
         if (Num(count) or 0) < match.stacks then
@@ -1240,6 +1484,7 @@ function P.ActiveAuras()
         local count = P.CastStacks(entry)
         if count then
           P.SeenStacks(entry, count)
+          Counted(active, entry, count)
           active[entry] = count >= entry.stacks or nil
         end
       end
@@ -1321,6 +1566,11 @@ end
 
 function P.NoteSeal(name)
   if type(name) == "string" and SEAL_NAMES[name] then
+    if P.lastSeal ~= name then
+      -- another seal: the one echo item may still show the old seal's echoes, so its "on, at least one" says
+      -- nothing about the new seal's echo until the item changes (the build-up's false first step, 2026-11-24)
+      P.sealChanged = true
+    end
     P.lastSeal = name -- a seal without an echo (the Crusader) clears it: P.echoBySeal has none
   end
 end
@@ -1347,6 +1597,8 @@ local function Guess(match)
 end
 
 -- A hidden count: reached when counted that far, or always when nothing counts it (no hooks: the old rule).
+P.Guess = Guess
+
 function P.StacksReached(match)
   local guess = P.stackGuess[match]
   return not (guess and guess.hooked) or guess.count >= (match.stacks or 0)
@@ -1375,6 +1627,9 @@ local function OnItemAuraUpdated(item)
   end
   guess.at, guess.item = now, item
   guess.count = math.min(match.stacks, math.max(guess.count, 1) + 1)
+  if match.seal then
+    P.sealChanged = false -- the item changed under this seal: its echo is this seal's
+  end
   P.UpdateSoon()
 end
 
@@ -1383,6 +1638,7 @@ local function OnItemAuraRemoved(item)
   if match then
     Guess(match).count = 0
     if match.seal then
+      P.sealChanged = false
       for _, echo in pairs(P.echoBySeal) do
         Guess(echo).count = 0 -- one item for every echo: whichever was on is gone
       end
@@ -1493,6 +1749,9 @@ function P.ViewerAuras(active, known)
             local count = type(cached) == "table" and cached.applications or nil
             if match.stacks and Readable(count) then
               P.SeenStacks(match, Num(count) or 0)
+              if active.counts then
+                Counted(active, match, Num(count) or 0)
+              end
               P.LearnCast(match, Num(count) or 0)
               if known then
                 known[match] = true
@@ -1507,12 +1766,20 @@ function P.ViewerAuras(active, known)
               if guess.count < 1 then
                 guess.count = 1 -- it is on: at least one
               end
+              -- the build-up (2026-11-24): the counted stacks, but not an echo's right after a seal change (the
+              -- one item may still show the old seal's echoes: a first step showed with no echo at all)
+              if active.counts and guess.hooked and not (match.seal and P.sealChanged) then
+                Counted(active, match, guess.count)
+              end
               if not guess.hooked or guess.count >= match.stacks then
                 active[match] = true
               end
             end
           elseif match and on == false and match.secretStacks then
             Guess(match).count = 0
+            if match.seal then
+              P.sealChanged = false -- no echo at all: the next one is this seal's
+            end
             P.LearnCast(match, 0)
           end
         end
@@ -1537,17 +1804,23 @@ function P.GameGlows(item)
 end
 
 -- Whether a reactive ability's slot is usable now; secret = no.
+-- Also returns whether only the resource is missing (the button's blue "not enough mana" state: a reactive ability's
+-- condition is met but you lack the rage), for the faint glow.
 function P.Usable(slot, id)
-  local usable
+  local usable, noMana
+  local function Read(...)
+    local a, b = ...
+    return Bool(a), Bool(b)
+  end
   if C_ActionBar and C_ActionBar.IsUsableAction then
-    usable = Bool(Ask(C_ActionBar.IsUsableAction, slot))
+    usable, noMana = Read(Ask(C_ActionBar.IsUsableAction, slot))
   elseif IsUsableAction then
-    usable = Bool(Ask(IsUsableAction, slot))
+    usable, noMana = Read(Ask(IsUsableAction, slot))
   end
   if usable == nil and C_Spell and C_Spell.IsSpellUsable then
-    usable = Bool(Ask(C_Spell.IsSpellUsable, id))
+    usable, noMana = Read(Ask(C_Spell.IsSpellUsable, id))
   end
-  return usable == true
+  return usable == true, usable ~= true and noMana == true
 end
 
 -- Can the spell be cast right now? Not while it lacks mana (rage, energy) or is otherwise unusable, nor while its
@@ -1633,11 +1906,23 @@ function P.Lit(item, auras)
     return false
   end
   if entry.reactive then
+    local usable, noMana
     if not item.slot then
-      local usable = C_Spell and C_Spell.IsSpellUsable and Bool(Ask(C_Spell.IsSpellUsable, item.id))
-      return usable == true, entry.key
+      local a, b
+      if C_Spell and C_Spell.IsSpellUsable then
+        a, b = Ask(C_Spell.IsSpellUsable, item.id)
+      end
+      usable, noMana = Bool(a) == true, Bool(a) ~= true and Bool(b) == true
+    else
+      usable, noMana = P.Usable(item.slot, item.id)
     end
-    return P.Usable(item.slot, item.id), entry.key
+    if usable then
+      return true, entry.key
+    end
+    if noMana then
+      return true, entry.key, false, true -- usable but for the rage: a faint glow (4th: dim)
+    end
+    return false, entry.key
   end
   for _, aura in ipairs(entry.auras or {}) do
     if auras[aura] then
@@ -1650,32 +1935,65 @@ function P.Lit(item, auras)
   return false
 end
 
+-- Whether a watched button holds this proc (its ability, or a spell of the buff of that name): the Play test.
+function P.ItemHas(item, name)
+  if item.entry.key == name then
+    return true
+  end
+  for _, aura in ipairs(item.entry.auras or {}) do
+    if aura.name == name then
+      return true
+    end
+  end
+  return false
+end
+
 P.litKeys = {}
 function P.Update()
   if not P.started then
     return
   end
   local auras = P.ActiveAuras()
+  local dimOn = Q.DB()[DIM_KEY] ~= false
+  local test = P.testProc and P.testProc.name
   local lit, shown, order = {}, {}, {}
   local ready, artOrder, wake = {}, {}, nil
+  local function Show(button, key, dim)
+    local was = shown[button]
+    if not was or (was.dim and not dim) then
+      shown[button] = { key = key, dim = dim and true or false }
+    end
+  end
   for _, item in ipairs(P.watch) do
-    local ok, on, key, artOnly = pcall(P.Lit, item, auras)
-    if ok and on then
-      if not artOnly then
-        shown[item.button] = true -- (an art-only proc lights no button: Clearcasting)
+    if test and P.ItemHas(item, test) then
+      Show(item.button, test, false) -- the Play test: lit for its few seconds, no sound
+    else
+      local ok, on, key, artOnly, dim = pcall(P.Lit, item, auras)
+      if ok and on and dim and not dimOn then
+        on = false -- (the faint glow is off: a reactive ability without the rage stays dark, as before)
       end
-      key = key or item.entry.key
-      if not lit[key] then
-        lit[key] = true
-        order[#order + 1] = key
-      end
-      -- the art: only for a proc one of whose lit spells can be cast now
-      if not ready[key] then
-        local can, ends = P.Castable(item.id)
-        if can then
-          ready[key] = true
-        elseif ends and (not wake or ends < wake) then
-          wake = ends
+      if ok and on then
+        key = key or item.entry.key
+        local can, ends = true, nil
+        if not dim then
+          can, ends = P.Castable(item.id)
+        end
+        if not artOnly then
+          Show(item.button, key, dim or (dimOn and not can)) -- (an art-only proc lights no button: Clearcasting)
+        end
+        if not dim then
+          if not lit[key] then
+            lit[key] = true
+            order[#order + 1] = key
+          end
+          -- the art: only for a proc one of whose lit spells can be cast now
+          if not ready[key] then
+            if can then
+              ready[key] = true
+            elseif ends and (not wake or ends < wake) then
+              wake = ends
+            end
+          end
         end
       end
     end
@@ -1704,8 +2022,8 @@ function P.Update()
       SetGlow(button, false)
     end
   end
-  for button in pairs(shown) do
-    SetGlow(button, true)
+  for button, want in pairs(shown) do
+    SetGlow(button, true, want.key, want.dim)
   end
   -- the game's alert is see-through only while it is up and our glow shows in its place
   local replace, hide = P.ReplaceGame(), {}
@@ -1729,8 +2047,55 @@ function P.Update()
     P.ProcSound(started)
   end
   if P.art then
-    P.art.Update(artOrder) -- the art beside your character (ProcArt.lua): castable procs only
+    -- the art beside your character (ProcArt.lua): castable procs only, then the stacking ones still building up
+    -- (in steps, or faint), and the stacks of the lit ones
+    local build, stacks = {}, {}
+    local buildOn = P.art.BuildOn and P.art.BuildOn()
+    for match, count in pairs(auras.counts or {}) do
+      if match.stacks and match.name then
+        if auras[match] then
+          stacks[match.name] = { count = math.max(count, match.stacks), stacks = match.stacks }
+        elseif buildOn and count >= 1 and count < match.stacks then
+          local can, ends = P.AuraCastable(match, auras)
+          if can or ends then -- (a spell of it is known)
+            build[#build + 1] = { name = match.name, count = count, stacks = match.stacks }
+          end
+        end
+      end
+    end
+    table.sort(build, function(a, b)
+      return a.name < b.name
+    end)
+    P.art.Update(artOrder, build, stacks)
   end
+end
+
+-- The preview panel's Play (2026-11-24): one proc's art, glow and sound for a few seconds, to try them together.
+P.TEST_TIME = 3
+function P.TestProc(name)
+  if not name then
+    return false
+  end
+  local token = {}
+  P.testProc = { name = name, token = token }
+  if P.started then
+    P.Update()
+  end
+  P.Play(P.SoundFor(name))
+  if P.art and P.art.Test then
+    P.art.Test(name)
+  end
+  if C_Timer and C_Timer.After then
+    C_Timer.After(P.TEST_TIME, function()
+      if P.testProc and P.testProc.token == token then
+        P.testProc = nil
+        if P.started then
+          P.Update()
+        end
+      end
+    end)
+  end
+  return true
 end
 
 -- One check again when the first cooldown keeping a proc's art away ends (SPELL_UPDATE_COOLDOWN does not always
@@ -1846,6 +2211,13 @@ local function InCombat()
   end
   return UnitAffectingCombat and Bool(Ask(UnitAffectingCombat, "player")) or false
 end
+P.InCombat = InCombat
+
+-- Seconds between two proc sounds (the option; P.SOUND_GAP when unset).
+function P.SoundGap()
+  local value = Num(Q.DB()[GAP_KEY])
+  return value and math.max(0, math.min(10, value)) or P.SOUND_GAP
+end
 
 -- A proc started (key: its name): the sound, when wanted, at most once per P.SOUND_GAP seconds across all procs.
 function P.ProcSound(key)
@@ -1857,7 +2229,7 @@ function P.ProcSound(key)
     return false
   end
   local now = GetTime()
-  if P.lastSound and now - P.lastSound < P.SOUND_GAP then
+  if P.lastSound and now - P.lastSound < P.SoundGap() then
     return false
   end
   if P.Play(P.SoundFor(key)) then
@@ -2014,6 +2386,9 @@ function P.Start()
   pcall(events.RegisterUnitEvent, events, "UNIT_HEALTH", "target")
   pcall(events.RegisterUnitEvent, events, "UNIT_SPELLCAST_SUCCEEDED", "player") -- seals (only paladins have any)
   pcall(events.RegisterEvent, events, "ADDON_LOADED")
+  if P.art and P.art.HookEditMode then
+    P.art.HookEditMode() -- the art's mover shows while Edit Mode is open
+  end
   P.Scan()
 end
 
@@ -2071,48 +2446,173 @@ function P.SoundChoices(withSame)
   return list
 end
 
--- The procs a sound can be picked for: every reactive ability, then the buffs.
-function P.SoundKeys()
+-- The procs a sound (or art) can be picked for: every reactive ability, then the buffs. With a class (the
+-- per-ability lists: the player's), only that class's (the user's request, 2026-11-23).
+function P.SoundKeys(class)
   local keys, seen = {}, {}
+  local function Add(name, owner)
+    if not seen[name] and (not class or not owner or owner == class) then
+      keys[#keys + 1] = name
+      seen[name] = true
+    end
+  end
   for _, entry in ipairs(P.REACTIVE) do
-    keys[#keys + 1] = entry.name
-    seen[entry.name] = true
+    Add(entry.name, entry.class)
   end
   for _, aura in ipairs(P.AURAS) do
-    if not seen[aura.name] then
-      keys[#keys + 1] = aura.name
-      seen[aura.name] = true
-    end
+    Add(aura.name, aura.class or aura.listClass)
+  end
+  for _, aura in ipairs(P.CustomAuras(class)) do
+    Add(aura.name, aura.class)
   end
   return keys
 end
 
-local ROW = 26
+-- The per-ability lists' procs: the player's class (every one while the class can't be read).
+function P.ClassKeys()
+  return P.SoundKeys(PlayerClass())
+end
 
--- A per-ability list on the page: one row per proc (name, a picker, optionally a Test button); shown while its
--- switch (eachKey) is on. The choice is saved in db[forKey][proc name]; "same" (the first choice) saves nothing.
--- Used for the sound per ability and the art side per ability.
-local function EachList(eachKey, forKey, Choices, Test, Off)
+local ROW = 26
+local FOLD_KEY = "procEachFolded" -- db[FOLD_KEY][eachKey] = true: that list is folded
+
+-- A per-ability list on the page, shown while its switch (eachKey) is on: a header that folds it (arrow, "<class>
+-- procs (n)"; the fold is saved in db[FOLD_KEY]), then one row per proc of the player's class (name, a picker,
+-- optionally a Test button; the user's request 2026-11-23: foldable, only the class's abilities). The choice is
+-- saved in db[forKey][proc name]; "same" (the first choice) saves nothing. Used for the sound, the art side and the
+-- art per ability.
+function P.EachFolded(eachKey)
+  local folded = Q.DB()[FOLD_KEY]
+  return type(folded) == "table" and folded[eachKey] == true
+end
+
+function P.SetEachFolded(eachKey, folded)
+  local db = Q.DB()
+  db[FOLD_KEY] = type(db[FOLD_KEY]) == "table" and db[FOLD_KEY] or {}
+  db[FOLD_KEY][eachKey] = folded and true or nil
+  if Q.RefreshPage then
+    Q.RefreshPage()
+  end
+end
+
+-- Preview (optional): function(box) returning a panel with .ShowArt(name), laid right of the rows; it shows the
+-- hovered row's proc, else the selected one (the last picker clicked, marked; first row at the start).
+-- Swatch (optional): a colour square after the picker (the art's colour per ability, 2026-11-24): Swatch.Color(key)
+-- -> colour, own (set for this proc), usable (its art takes a colour); Swatch.Pick(key); Swatch.Clear(key).
+local function EachList(eachKey, forKey, Choices, Test, Off, Preview, Swatch)
+  local pickerWidth = Swatch and 164 or 190
+  local rowEnd = Test and 398 or Swatch and 362 or 330 -- where a row's widgets end (its bands too)
+  local function ShowPreview(sub, key)
+    if sub.preview then
+      sub.preview.ShowArt(key or sub.selected)
+    end
+  end
+  -- the selected row (the preview's when nothing is hovered): marked only once the player picked on it, never the
+  -- first row shown by default (it looked selected for no reason: the user's screenshot, 2026-11-24)
+  local function Select(sub, key, picked)
+    sub.selected = key
+    if picked then
+      sub.picked = key
+    end
+    for _, row in ipairs(sub.rows) do
+      if row.mark then
+        row.mark:SetShown(sub.preview ~= nil and sub.picked ~= nil and row.key == sub.picked)
+      end
+    end
+    ShowPreview(sub, sub.hovered and sub.hovered.key)
+  end
+  -- one hovered row per list (nil = none): its band, and the preview shows it
+  local function SetHover(sub, row)
+    if sub.hovered == row then
+      return
+    end
+    if sub.hovered then
+      sub.hovered.hover:Hide()
+    end
+    sub.hovered = row
+    if row then
+      row.hover:Show()
+    end
+    ShowPreview(sub, row and row.key)
+  end
+  P.EachSetHover = SetHover -- (tests)
   local function Build(parent, last, sub)
     local box = CreateFrame("Frame", nil, parent)
     box:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 26, -4)
     box:SetPoint("RIGHT", 0, 0)
     box:SetHeight(1)
     sub.holder, sub.rows = box, {}
-    for index, key in ipairs(P.SoundKeys()) do
+    local keys = P.ClassKeys()
+    local header = CreateFrame("Button", nil, box)
+    header:SetHeight(ROW - 4)
+    header:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0)
+    header:SetPoint("RIGHT", 0, 0)
+    if ns.UI.FoldArrow then
+      header.arrow = ns.UI.FoldArrow(header)
+      header.arrow:SetPoint("LEFT", 2, 0)
+    end
+    header.label = ns.UI.Text(header, "body", 12, "muted")
+    header.label:SetPoint("LEFT", 18, 0)
+    header.label:SetPoint("RIGHT", 0, 0)
+    header.label:SetJustifyH("LEFT")
+    local className = UnitClass("player")
+    if #keys == 0 then
+      header.label:SetText("Nothing on the list for your class.")
+    else
+      header.label:SetText(("%s procs (%d)"):format(type(className) == "string" and className or "Your", #keys))
+      header:SetScript("OnClick", function()
+        P.SetEachFolded(eachKey, not P.EachFolded(eachKey))
+      end)
+    end
+    sub.header = header
+    for index, key in ipairs(keys) do
       local row = CreateFrame("Frame", nil, box)
       row:SetHeight(ROW - 2)
-      row:SetPoint("TOPLEFT", box, "TOPLEFT", 0, -(index - 1) * ROW)
+      row:SetPoint("TOPLEFT", box, "TOPLEFT", 0, -index * ROW)
       row:SetPoint("RIGHT", 0, 0)
       row.key = key
+      -- `hover`: a band behind the row while the pointer is on it, its picker or its buttons (the user's request,
+      -- 2026-11-23); `mark`: a short accent bar at the left of the row picked on last (lists with a preview)
+      local accent = ns.Theme().accent or { 1, 0.82, 0 }
+      row.hover = row:CreateTexture(nil, "BACKGROUND")
+      row.hover:SetPoint("TOPLEFT", -4, 1)
+      row.hover:SetPoint("BOTTOMRIGHT", row, "BOTTOMLEFT", rowEnd, -1)
+      row.hover:SetColorTexture(accent[1], accent[2], accent[3], 0.1)
+      row.hover:Hide()
+      if Preview then
+        row.mark = row:CreateTexture(nil, "ARTWORK")
+        row.mark:SetPoint("TOPLEFT", -8, 0)
+        row.mark:SetPoint("BOTTOMLEFT", -8, 0)
+        row.mark:SetWidth(3)
+        row.mark:SetColorTexture(accent[1], accent[2], accent[3], 1)
+        row.mark:Hide()
+      end
+      local function Enter()
+        SetHover(sub, row)
+      end
+      local function Leave()
+        if row.IsMouseOver and row:IsMouseOver() then
+          return -- (onto its picker / buttons, or back from them)
+        end
+        if sub.hovered == row then
+          SetHover(sub, nil)
+        end
+      end
+      row.Enter, row.Leave = Enter, Leave
+      row:EnableMouse(true)
+      row:SetScript("OnEnter", Enter)
+      row:SetScript("OnLeave", Leave)
       row.label = ns.UI.Text(row, "body", 12, "text")
       row.label:SetPoint("LEFT", 0, 0)
       row.label:SetWidth(130)
       row.label:SetJustifyH("LEFT")
       row.label:SetText(key)
-      row.picker = ns.UI.Picker(row, 190, 22)
+      row.picker = ns.UI.Picker(row, pickerWidth, 22)
       row.picker:SetPoint("LEFT", 136, 0)
       row.picker:SetScript("OnClick", function(self)
+        if Preview then
+          Select(sub, key, true)
+        end
         Q.OpenChoice(self, Choices(), (Q.DB()[forKey] or {})[key] or "same", function(value)
           P.SetFor(forKey, key, value)
         end)
@@ -2124,16 +2624,129 @@ local function EachList(eachKey, forKey, Choices, Test, Off)
           Test(key)
         end)
       end
+      if Swatch then
+        local swatch = CreateFrame("Button", nil, row)
+        swatch:SetSize(22, 22)
+        swatch:SetPoint("LEFT", row.picker, "RIGHT", 8, 0)
+        swatch:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        swatch.edge = swatch:CreateTexture(nil, "BORDER")
+        swatch.edge:SetAllPoints()
+        swatch.fill = swatch:CreateTexture(nil, "ARTWORK")
+        swatch.fill:SetPoint("TOPLEFT", 2, -2)
+        swatch.fill:SetPoint("BOTTOMRIGHT", -2, 2)
+        swatch:SetScript("OnClick", function(_, button)
+          Select(sub, key, true)
+          if button == "RightButton" then
+            Swatch.Clear(key)
+          else
+            Swatch.Pick(key)
+          end
+        end)
+        swatch:SetScript("OnEnter", function(self)
+          if not GameTooltip then
+            return
+          end
+          local _, own, usable = Swatch.Color(key)
+          GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+          GameTooltip:SetText("Art colour: " .. key)
+          GameTooltip:AddLine(own and "Its own colour." or "The Art colour.", 1, 1, 1, true)
+          if not usable then
+            GameTooltip:AddLine("Its art keeps its own colours; a style, the icon or the arc takes this one.",
+              1, 0.82, 0, true)
+          end
+          GameTooltip:AddLine("Click: pick a colour. Right-click or the button beside it: back to the Art colour.",
+            0.7, 0.7, 0.7, true)
+          GameTooltip:Show()
+        end)
+        swatch:SetScript("OnLeave", function()
+          if GameTooltip then
+            GameTooltip:Hide()
+          end
+        end)
+        row.swatch = swatch
+        -- its reset (shown while the ability has a colour of its own): back to the Art colour
+        local reset = ns.UI.Button(row, 22, 22, "")
+        reset:SetPoint("LEFT", swatch, "RIGHT", 4, 0)
+        reset.icon = reset:CreateTexture(nil, "OVERLAY")
+        reset.icon:SetSize(14, 14)
+        reset.icon:SetPoint("CENTER")
+        reset.icon:SetTexture("Interface\\Buttons\\UI-RefreshButton")
+        reset:SetScript("OnClick", function()
+          Select(sub, key, true)
+          Swatch.Clear(key)
+        end)
+        reset:HookScript("OnEnter", function(self)
+          if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Reset the colour")
+            GameTooltip:AddLine("Back to the Art colour for " .. key .. ".", 1, 1, 1, true)
+            GameTooltip:Show()
+          end
+        end)
+        reset:HookScript("OnLeave", function()
+          if GameTooltip then
+            GameTooltip:Hide()
+          end
+        end)
+        row.reset = reset
+      end
+      for _, child in ipairs({ row.picker, row.test, row.swatch, row.reset }) do
+        if child.HookScript then -- (after the button's own OnEnter / OnLeave)
+          child:HookScript("OnEnter", Enter)
+          child:HookScript("OnLeave", Leave)
+        end
+      end
       sub.rows[index] = row
     end
     sub.count = #sub.rows
+    -- a check a few times a second while a row is hovered: a leave the game didn't report (onto a menu, a fast
+    -- move between a picker and the next row) never leaves a band lit (the user's screenshot, 2026-11-24)
+    local wait = 0
+    box:SetScript("OnUpdate", function(_, elapsed)
+      local row = sub.hovered
+      wait = wait + (elapsed or 0)
+      if not row or wait < 0.1 then
+        return
+      end
+      wait = 0
+      if not (row:IsVisible() and row:IsMouseOver()) then
+        SetHover(sub, nil)
+      end
+    end)
+    box:SetScript("OnHide", function()
+      SetHover(sub, nil)
+    end)
+    if Preview and sub.count > 0 then
+      local ok, panel = pcall(Preview, box)
+      if ok and panel then
+        panel:SetPoint("TOPLEFT", box, "TOPLEFT", rowEnd + 8, -ROW)
+        sub.preview = panel
+        Select(sub, keys[1])
+      end
+    end
     return box
   end
   local function Refresh(sub, on)
     local db = Q.DB()
-    local open = db[eachKey] and true or false
+    local shown = db[eachKey] and true or false
+    local open = shown and sub.count > 0 and not P.EachFolded(eachKey)
     local enabled = on and not (Off and Off()) and true or false
-    sub.holder:SetHeight(open and sub.count * ROW or 1)
+    local height = (open and sub.count + 1 or 1) * ROW
+    if open and sub.preview then
+      height = math.max(height, ROW + sub.preview:GetHeight() + 4)
+    end
+    sub.holder:SetHeight(shown and height or 1)
+    if sub.preview then
+      sub.preview:SetShown(open)
+      if open then
+        ShowPreview(sub)
+      end
+    end
+    sub.header:SetShown(shown)
+    if sub.header.arrow then
+      sub.header.arrow:SetOpen(open)
+      sub.header.arrow:SetShown(sub.count > 0)
+    end
     local choices = Choices()
     for _, row in ipairs(sub.rows) do
       row:SetShown(open)
@@ -2142,6 +2755,17 @@ local function EachList(eachKey, forKey, Choices, Test, Off)
       row.picker:SetEnabled(enabled)
       if row.test then
         row.test:SetEnabled(enabled)
+      end
+      if row.swatch then
+        local color, own, usable = Swatch.Color(row.key)
+        color = color or { 1, 1, 1 }
+        row.swatch.fill:SetColorTexture(color[1], color[2], color[3], usable and 1 or 0.35)
+        local edge = own and (ns.Theme().accent or { 1, 0.82, 0 }) or { 0.35, 0.35, 0.35 }
+        row.swatch.edge:SetColorTexture(edge[1], edge[2], edge[3], 1)
+        row.swatch.own, row.swatch.usable = own, usable
+        row.swatch:SetEnabled(enabled)
+        row.reset:SetShown(own and true or false)
+        row.reset:SetEnabled(enabled)
       end
       row:SetAlpha(enabled and 1 or 0.5)
     end
@@ -2208,7 +2832,10 @@ local function SideChoices()
   end
   return list
 end
-local BuildSides, RefreshSides = EachList("procArtSideEach", "procArtSideFor", SideChoices, nil, ArtOff)
+local BuildSides, RefreshSides = EachList("procArtSideEach", "procArtSideFor", SideChoices, nil, ArtOff,
+  function(box)
+    return P.art and P.art.PreviewPanel and P.art.PreviewPanel(box)
+  end)
 
 -- The art per ability: "Same as Art" first, then every look and style.
 local function LookChoices()
@@ -2218,7 +2845,477 @@ local function LookChoices()
   end
   return list
 end
-local BuildLooks, RefreshLooks = EachList("procArtLookEach", "procArtLookFor", LookChoices, nil, ArtOff)
+local BuildLooks, RefreshLooks = EachList("procArtLookEach", "procArtLookFor", LookChoices, nil, ArtOff,
+  function(box)
+    return P.art and P.art.PreviewPanel and P.art.PreviewPanel(box)
+  end,
+  { -- a colour per ability (ProcArt.lua: A.ColorFor, saved in procArtColorFor)
+    Color = function(key)
+      local A = P.art
+      if not A then
+        return nil, false, false
+      end
+      local art = A.ArtFor(key)
+      return A.TintFor(key), A.ColorFor(key) ~= nil, art and art.tint and true or false
+    end,
+    Pick = function(key) if P.art then P.art.PickColor(key) end end,
+    Clear = function(key) if P.art then P.art.SetColorFor(key, nil) end end,
+  })
+
+-- The glow per ability (2026-11-24): a style picker per proc ("Same as Glow style" first) and a colour square (its
+-- own colour; none for the game's spell alert, which keeps its colours).
+local function GlowChoices()
+  local list = { { "same", "Same as Glow style" } }
+  for _, style in ipairs(P.STYLES) do
+    list[#list + 1] = style
+  end
+  return list
+end
+local BuildGlows, RefreshGlows = EachList(GLOW_EACH_KEY, GLOW_FOR_KEY, GlowChoices, nil, nil, nil, {
+  Color = function(key)
+    return P.ColorFor(key), P.OwnGlowColor(key) ~= nil, P.StyleFor(key) ~= "alert"
+  end,
+  Pick = function(key) P.PickGlowColor(key) end,
+  Clear = function(key) P.SetGlowColor(key, nil) end,
+})
+
+-- Your own procs on the page: a heading, a note, one row per saved proc of your class (Remove) and a row to add one
+-- (two edit boxes and Add).
+local function EditBox(parent, width)
+  if ns.UI.EditBox then
+    return ns.UI.EditBox(parent, width, 22)
+  end
+  local box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+  box:SetSize(width, 22)
+  box:SetAutoFocus(false)
+  return box
+end
+
+local CUSTOM_NOTE = "A buff of yours lights a spell on your bars, with art and sound like the others: pick them from your "
+  .. "buffs, gear, consumables and spells. In a fight the game hides most buffs from addons: track the buff in the "
+  .. "cooldown manager for it to work then."
+
+-- The picker for your own procs (2026-11-24, the user's "players don't know spell IDs: list their class spells and
+-- consumables in another window, categorized"): categories on the left, their entries on the right (icon, name, ID),
+-- a search box across all of them. For the buff box: the buffs on you now (out of combat: in a fight the game hides
+-- them), your gear with a use or equip spell (trinkets), the bags' consumables by the game's own sub types (Potion,
+-- Elixir, Flask, Food & Drink, ...) and other items with a use spell, then your spells by spellbook tab. For the spell
+-- box: your spells by tab. A pick writes "Name (ID)" in the box (P.BoxValue reads the ID back).
+local function Call(fn, ...)
+  if type(fn) ~= "function" then
+    return nil
+  end
+  return Pass(pcall(fn, ...))
+end
+
+local function ItemSpell(itemID)
+  local get = (C_Item and C_Item.GetItemSpell) or GetItemSpell
+  local name, id = Call(get, itemID)
+  return Str(name), Num(id)
+end
+
+local function ItemIcon(itemID)
+  local get = (C_Item and C_Item.GetItemIconByID) or GetItemIcon
+  return Num(Call(get, itemID)) or Str(Call(get, itemID))
+end
+
+-- Your spells by spellbook tab: { { title, entries } } (not passives; mode "spell" or "buff").
+local function BookCategories(prefix)
+  local book, list = C_SpellBook, {}
+  if type(book) ~= "table" then
+    return list
+  end
+  local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
+  local spellType = Enum and Enum.SpellBookItemType and Enum.SpellBookItemType.Spell or 1
+  for line = 1, Num(Call(book.GetNumSpellBookSkillLines)) or 0 do
+    local info = Call(book.GetSpellBookSkillLineInfo, line)
+    local offset = type(info) == "table" and Num(info.itemIndexOffset)
+    local count = type(info) == "table" and Num(info.numSpellBookItems)
+    if offset and count and not info.isGuild then
+      local entries, seen = {}, {}
+      for slot = offset + 1, offset + count do
+        local item = Call(book.GetSpellBookItemInfo, slot, bank)
+        local name = type(item) == "table" and Str(item.name)
+        if name and Num(item.itemType) == spellType and not item.isPassive and not seen[name] then
+          seen[name] = true
+          entries[#entries + 1] = { name = name, id = Num(item.spellID), icon = Num(item.iconID), kind = "spell" }
+        end
+      end
+      if #entries > 0 then
+        list[#list + 1] = { title = prefix .. (Str(info.name) or "?"), entries = entries }
+      end
+    end
+  end
+  return list
+end
+
+function P.PickerCategories(mode)
+  local list = {}
+  if mode == "buff" then
+    local now, seen = {}, {}
+    local read = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
+    for index = 1, 40 do
+      local aura = Call(read, "player", index, "HELPFUL")
+      if type(aura) ~= "table" then
+        break
+      end
+      local name, id = Str(aura.name), Num(aura.spellId)
+      if name and id and not seen[id] then
+        seen[id] = true
+        now[#now + 1] = { name = name, id = id, icon = Num(aura.icon), kind = "spell" }
+      end
+    end
+    list[#list + 1] = { title = "On you now", entries = now,
+      empty = "No buffs to read (in a fight the game hides them)." }
+    local gear = {}
+    for slot = 1, 19 do
+      local itemID = Num(Call(GetInventoryItemID, "player", slot))
+      local name, id = ItemSpell(itemID)
+      if itemID and id then
+        gear[#gear + 1] = { name = name, id = id, icon = ItemIcon(itemID), kind = "spell",
+          note = (C_Item and Str(Call(C_Item.GetItemNameByID, itemID))) or nil }
+      end
+    end
+    list[#list + 1] = { title = "Trinkets and gear", entries = gear, empty = "Nothing you wear has a use spell." }
+    local byType, order, other, seenItem = {}, {}, {}, {}
+    for bag = 0, 4 do
+      for slot = 1, Num(C_Container and Call(C_Container.GetContainerNumSlots, bag)) or 0 do
+        local info = C_Container and Call(C_Container.GetContainerItemInfo, bag, slot)
+        local itemID = type(info) == "table" and Num(info.itemID)
+        local name, id = ItemSpell(itemID)
+        if itemID and id and not seenItem[itemID] then
+          seenItem[itemID] = true
+          local _, _, subType, _, icon, classID = Call(C_Item and C_Item.GetItemInfoInstant, itemID)
+          local entry = { name = name, id = id, icon = Num(icon) or ItemIcon(itemID), kind = "spell",
+            note = (C_Item and Str(Call(C_Item.GetItemNameByID, itemID))) or nil }
+          if Num(classID) == 0 and Str(subType) then
+            if not byType[subType] then
+              byType[subType] = {}
+              order[#order + 1] = subType
+            end
+            table.insert(byType[subType], entry)
+          else
+            other[#other + 1] = entry
+          end
+        end
+      end
+    end
+    table.sort(order)
+    for _, subType in ipairs(order) do
+      list[#list + 1] = { title = "Bags: " .. subType, entries = byType[subType] }
+    end
+    if #other > 0 then
+      list[#list + 1] = { title = "Bags: other items", entries = other }
+    end
+    for _, category in ipairs(BookCategories("Spells: ")) do
+      list[#list + 1] = category
+    end
+  else
+    list = BookCategories("")
+  end
+  for _, category in ipairs(list) do
+    table.sort(category.entries, function(a, b)
+      return a.name < b.name
+    end)
+  end
+  return list
+end
+
+local PICK_ROWS, PICK_ROW = 14, 22
+local picker
+
+local function PickerFill()
+  local frame = picker
+  local query = Trim(frame.search:GetText()):lower()
+  local entries = {}
+  if query ~= "" then
+    for _, category in ipairs(frame.categories) do
+      for _, entry in ipairs(category.entries) do
+        local text = (entry.name .. " " .. (entry.note or "") .. " " .. tostring(entry.id or "")):lower()
+        if text:find(query, 1, true) then
+          entries[#entries + 1] = { entry = entry, where = category.title }
+        end
+      end
+    end
+  else
+    local category = frame.categories[frame.selected]
+    for _, entry in ipairs(category and category.entries or {}) do
+      entries[#entries + 1] = { entry = entry }
+    end
+  end
+  frame.entries = entries
+  frame.offset = math.max(0, math.min(frame.offset or 0, #entries - PICK_ROWS))
+  for index, row in ipairs(frame.rows) do
+    local item = entries[frame.offset + index]
+    row.item = item
+    if item then
+      local entry = item.entry
+      row.icon:SetTexture(entry.icon or 134400)
+      row.name:SetText(entry.name)
+      row.id:SetText(item.where or (entry.note and entry.note ~= entry.name and entry.note) or (entry.id and ("ID " .. entry.id)) or "")
+      row:Show()
+    else
+      row:Hide()
+    end
+  end
+  for index, button in ipairs(frame.tabs) do
+    local category = frame.categories[index]
+    button:SetShown(category ~= nil)
+    if category then
+      button.label:SetText(("%s (%d)"):format(category.title, #category.entries))
+      button.mark:SetShown(query == "" and index == frame.selected)
+    end
+  end
+  local category = frame.categories[frame.selected]
+  frame.empty:SetText(#entries == 0 and (query ~= "" and "Nothing matches." or (category and category.empty)
+    or "Nothing here.") or "")
+end
+
+local function PickerFrame()
+  if picker then
+    return picker
+  end
+  local UI = ns.UI
+  local frame = CreateFrame("Frame", (ns.PROC_FRAMES or "Codex") .. "ProcPicker", UIParent)
+  frame:SetSize(560, 92 + PICK_ROWS * PICK_ROW)
+  frame:SetPoint("CENTER")
+  frame:SetFrameStrata("DIALOG")
+  frame:SetClampedToScreen(true)
+  frame:SetMovable(true)
+  frame:EnableMouse(true)
+  frame:RegisterForDrag("LeftButton")
+  frame:SetScript("OnDragStart", frame.StartMoving)
+  frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+  UI.Panel(frame)
+  frame.title = UI.Text(frame, "head", 15, "accent")
+  frame.title:SetPoint("TOPLEFT", 16, -14)
+  local close = UI.CloseButton(frame)
+  close:SetPoint("TOPRIGHT", -10, -10)
+  close:SetScript("OnClick", function()
+    frame:Hide()
+  end)
+  table.insert(UISpecialFrames, (ns.PROC_FRAMES or "Codex") .. "ProcPicker")
+  frame.search = EditBox(frame, 220)
+  frame.search:SetPoint("TOPRIGHT", -44, -12)
+  frame.search:SetScript("OnTextChanged", function()
+    frame.offset = 0
+    PickerFill()
+  end)
+  frame.hint = UI.Text(frame, "body", 11, "muted")
+  frame.hint:SetPoint("RIGHT", frame.search, "LEFT", -8, 0)
+  frame.hint:SetText("Search")
+  frame.tabs = {}
+  for index = 1, PICK_ROWS + 2 do
+    local button = CreateFrame("Button", nil, frame)
+    button:SetSize(178, 20)
+    button:SetPoint("TOPLEFT", 14, -44 - (index - 1) * 21)
+    button.label = UI.Text(button, "body", 11, "text")
+    button.label:SetPoint("LEFT", 8, 0)
+    button.label:SetPoint("RIGHT", -2, 0)
+    button.label:SetJustifyH("LEFT")
+    button.label:SetWordWrap(false)
+    local accent = ns.Theme().accent or { 1, 0.82, 0 }
+    button.mark = button:CreateTexture(nil, "BACKGROUND")
+    button.mark:SetAllPoints()
+    button.mark:SetColorTexture(accent[1], accent[2], accent[3], 0.18)
+    button:SetScript("OnClick", function()
+      frame.selected, frame.offset = index, 0
+      frame.search:SetText("")
+      PickerFill()
+    end)
+    frame.tabs[index] = button
+  end
+  frame.rows = {}
+  for index = 1, PICK_ROWS do
+    local row = CreateFrame("Button", nil, frame)
+    row:SetSize(340, PICK_ROW - 2)
+    row:SetPoint("TOPLEFT", 204, -44 - (index - 1) * PICK_ROW)
+    row.hover = row:CreateTexture(nil, "BACKGROUND")
+    row.hover:SetAllPoints()
+    row.hover:SetColorTexture(1, 1, 1, 0.08)
+    row.hover:Hide()
+    row.icon = row:CreateTexture(nil, "ARTWORK")
+    row.icon:SetSize(18, 18)
+    row.icon:SetPoint("LEFT", 2, 0)
+    row.name = UI.Text(row, "body", 12, "text")
+    row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
+    row.name:SetPoint("RIGHT", row, "RIGHT", -120, 0)
+    row.name:SetJustifyH("LEFT")
+    row.name:SetWordWrap(false)
+    row.id = UI.Text(row, "body", 11, "muted")
+    row.id:SetPoint("RIGHT", -4, 0)
+    row.id:SetWidth(114)
+    row.id:SetJustifyH("RIGHT")
+    row.id:SetWordWrap(false)
+    row:SetScript("OnEnter", function(self)
+      self.hover:Show()
+      local entry = self.item and self.item.entry
+      if entry and entry.id and GameTooltip then
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if GameTooltip.SetSpellByID then
+          pcall(GameTooltip.SetSpellByID, GameTooltip, entry.id)
+        else
+          GameTooltip:SetText(entry.name)
+        end
+        GameTooltip:Show()
+      end
+    end)
+    row:SetScript("OnLeave", function(self)
+      self.hover:Hide()
+      if GameTooltip then
+        GameTooltip:Hide()
+      end
+    end)
+    row:SetScript("OnClick", function(self)
+      local entry = self.item and self.item.entry
+      if entry and frame.onPick then
+        frame.onPick(entry)
+        frame:Hide()
+      end
+    end)
+    frame.rows[index] = row
+  end
+  frame:EnableMouseWheel(true)
+  frame:SetScript("OnMouseWheel", function(_, delta)
+    frame.offset = (frame.offset or 0) - delta * 3
+    PickerFill()
+  end)
+  frame.empty = UI.Text(frame, "body", 12, "muted")
+  frame.empty:SetPoint("TOPLEFT", 210, -50)
+  frame.empty:SetWidth(330)
+  frame.foot = UI.Text(frame, "body", 11, "muted")
+  frame.foot:SetPoint("BOTTOMLEFT", 16, 14)
+  frame.foot:SetPoint("RIGHT", -16, 0)
+  frame.foot:SetJustifyH("LEFT")
+  frame:Hide()
+  picker = frame
+  return frame
+end
+
+-- Opens the picker for the buff ("buff") or the spell ("spell") box; onPick(entry) gets { name, id, icon }.
+function P.OpenPicker(mode, onPick)
+  local frame = PickerFrame()
+  frame.mode, frame.onPick = mode, onPick
+  frame.categories = P.PickerCategories(mode)
+  frame.selected, frame.offset = 1, 0
+  frame.title:SetText(mode == "buff" and "Pick the buff" or "Pick the spell it lights")
+  frame.foot:SetText(mode == "buff" and "Hover one for its tooltip; a click puts it in the box. Your buffs show out "
+    .. "of combat only." or "Your spells by spellbook tab; a click puts it in the box.")
+  frame.search:SetText("")
+  PickerFill()
+  frame:Show()
+  return frame
+end
+P.PickerFill = PickerFill
+
+local function BuildCustom(parent, last, sub)
+  local box = CreateFrame("Frame", nil, parent)
+  box:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -8)
+  box:SetPoint("RIGHT", 0, 0)
+  box:SetHeight(1)
+  sub.holder, sub.rows = box, {}
+  sub.title = ns.UI.Text(box, "body", 13, "text")
+  sub.title:SetPoint("TOPLEFT", 0, 0)
+  sub.title:SetText("Your own procs")
+  sub.note = ns.UI.Text(box, "body", 11, "muted")
+  sub.note:SetPoint("TOPLEFT", sub.title, "BOTTOMLEFT", 0, -4)
+  sub.note:SetPoint("RIGHT", box, "RIGHT", -8, 0)
+  sub.note:SetJustifyH("LEFT")
+  sub.note:SetText(CUSTOM_NOTE)
+  local add = CreateFrame("Frame", nil, box)
+  add:SetHeight(ROW + 14)
+  sub.add = add
+  local buffLabel = ns.UI.Text(add, "body", 11, "muted")
+  buffLabel:SetPoint("TOPLEFT", 0, 0)
+  buffLabel:SetText("Buff (pick one, or a name or spell ID)")
+  local spellLabel = ns.UI.Text(add, "body", 11, "muted")
+  spellLabel:SetPoint("TOPLEFT", 190, 0)
+  spellLabel:SetText("Spell it lights")
+  sub.buffBox = EditBox(add, 136)
+  sub.buffBox:SetPoint("TOPLEFT", 0, -15)
+  sub.buffPick = ns.UI.Button(add, 44, 22, "Pick")
+  sub.buffPick:SetPoint("TOPLEFT", 140, -15)
+  sub.spellBox = EditBox(add, 136)
+  sub.spellBox:SetPoint("TOPLEFT", 190, -15)
+  sub.spellPick = ns.UI.Button(add, 44, 22, "Pick")
+  sub.spellPick:SetPoint("TOPLEFT", 330, -15)
+  sub.addButton = ns.UI.Button(add, 56, 22, "Add")
+  sub.addButton:SetPoint("TOPLEFT", 384, -15)
+  local function Into(box)
+    return function(entry)
+      box:SetText(entry.id and ("%s (%d)"):format(entry.name, entry.id) or entry.name)
+    end
+  end
+  sub.buffPick:SetScript("OnClick", function()
+    P.OpenPicker("buff", Into(sub.buffBox))
+  end)
+  sub.spellPick:SetScript("OnClick", function()
+    P.OpenPicker("spell", function(entry)
+      sub.spellBox:SetText(entry.name) -- (by name: every rank of it lights)
+    end)
+  end)
+  sub.message = ns.UI.Text(add, "body", 11, "muted")
+  sub.message:SetPoint("LEFT", sub.addButton, "RIGHT", 8, 0)
+  sub.message:SetPoint("RIGHT", add, "RIGHT", 0, 0)
+  sub.message:SetJustifyH("LEFT")
+  sub.addButton:SetScript("OnClick", function()
+    local ok, why = P.AddCustom(sub.buffBox:GetText(), sub.spellBox:GetText())
+    if ok then
+      sub.buffBox:SetText("")
+      sub.spellBox:SetText("")
+      sub.buffBox:ClearFocus()
+      sub.spellBox:ClearFocus()
+    end
+    sub.message:SetText(why or "")
+  end)
+  return box
+end
+
+local function CustomRow(sub, index)
+  local row = CreateFrame("Frame", nil, sub.holder)
+  row:SetHeight(ROW - 2)
+  row.label = ns.UI.Text(row, "body", 12, "text")
+  row.label:SetPoint("LEFT", 0, 0)
+  row.label:SetPoint("RIGHT", row, "LEFT", 340, 0)
+  row.label:SetJustifyH("LEFT")
+  row.remove = ns.UI.Button(row, 70, 22, "Remove")
+  row.remove:SetPoint("LEFT", 352, 0)
+  row.remove:SetScript("OnClick", function()
+    if row.index then
+      P.RemoveCustom(row.index)
+    end
+  end)
+  sub.rows[index] = row
+  return row
+end
+
+local function RefreshCustom(sub, on)
+  local list = P.CustomList(PlayerClass())
+  local noteHeight = Num(sub.note.GetStringHeight and sub.note:GetStringHeight())
+  local y = 18 + math.max(noteHeight or 0, 28) + 8
+  for index, entry in ipairs(list) do
+    local row = sub.rows[index] or CustomRow(sub, index)
+    row:ClearAllPoints()
+    row:SetPoint("TOPLEFT", sub.holder, "TOPLEFT", 0, -y)
+    row:SetPoint("RIGHT", sub.holder, "RIGHT", 0, 0)
+    row.index = entry.index
+    row.label:SetText(("%s lights %s"):format(entry.aura.name, entry.aura.spells[1]))
+    row.remove:SetEnabled(on and true or false)
+    row:Show()
+    y = y + ROW
+  end
+  for index = #list + 1, #sub.rows do
+    sub.rows[index]:Hide()
+  end
+  sub.add:ClearAllPoints()
+  sub.add:SetPoint("TOPLEFT", sub.holder, "TOPLEFT", 0, -y)
+  sub.add:SetPoint("RIGHT", sub.holder, "RIGHT", 0, 0)
+  sub.holder:SetHeight(y + ROW + 18)
+  sub.addButton:SetEnabled(on and true or false)
+  sub.buffPick:SetEnabled(on and true or false)
+  sub.spellPick:SetEnabled(on and true or false)
+  sub.holder:SetAlpha(on and 1 or 0.5)
+end
 
 local function NotForAlert(what)
   return function()
@@ -2262,6 +3359,12 @@ Q.AddToggle({
         end
         return nil
       end },
+    { key = DIM_KEY, name = "Dim the glow while you can't cast the spell yet", default = true,
+      desc = "Not enough rage, energy or mana, or its cooldown still running: the glow shows faintly until you can.",
+      Changed = function() if P.started then P.Update() end end },
+    { key = GLOW_EACH_KEY, name = "Choose the glow per ability", default = false, Changed = Repainted },
+    { key = GLOW_FOR_KEY, kind = "custom", default = {}, Build = BuildGlows, Refresh = RefreshGlows,
+      Changed = Repainted },
     { key = CDM_KEY, name = "Also on the cooldown manager", default = true,
       Changed = function()
         if P.started then
@@ -2278,14 +3381,22 @@ Q.AddToggle({
       Disabled = function()
         return not Q.DB()[CDM_KEY] and "Needs \"Also on the cooldown manager\"." or nil
       end },
+    { key = CUSTOM_KEY, kind = "custom", default = {}, Build = BuildCustom, Refresh = RefreshCustom },
     { key = "procArt", name = "Art beside your character while an ability procs", default = true,
       Changed = function() if P.art then P.art.Refresh() end end },
+    { key = "procArtCombat", name = "Art only in combat", default = false, Changed = ArtRefresh, Disabled = ArtOff },
+    { key = "procArtBuild", name = "Show stacking procs as they build up", default = true,
+      desc = "Heating Up and the seal echoes: the art builds up, the inner arc at one stack, both arcs at two, the symbol when full.",
+      Changed = function() if P.started then P.Update() end end, Disabled = ArtOff },
+    { key = "procArtMove", kind = "button", name = "Move the art",
+      Click = function() if P.art then P.art.ToggleMover() end end, Disabled = ArtOff },
     { key = "procArtTest", kind = "button", name = "Show the art", Click = function() if P.art then P.art.Test() end end,
       Disabled = ArtOff },
     { key = "procArtLook", kind = "choice", name = "Art", default = "codex", choices = ArtChoice("LOOKS"),
       Changed = ArtRefresh, Disabled = ArtOff },
     { key = "procArtColor", kind = "choice", name = "Art colour", default = "proc", choices = ArtChoice("COLOR_CHOICES"),
       button = { name = "Pick", Click = function() if P.art then P.art.PickColor() end end },
+      button2 = { name = "Reset", Click = function() if P.art then P.art.ResetColor() end end },
       Changed = ArtRefresh, Disabled = ArtOff },
     { key = "procArtSide", kind = "choice", name = "Art side", default = "both", choices = ArtChoice("SIDES"),
       Changed = ArtRefresh, Disabled = ArtOff },
@@ -2307,6 +3418,7 @@ Q.AddToggle({
     { key = KIT_KEY, kind = "choice", name = "Sound", default = "ping", choices = P.SoundChoices(false),
       button = { name = "Test", Click = function() P.Play() end } },
     { key = COMBAT_KEY, name = "Only in combat", default = true },
+    { key = GAP_KEY, kind = "stepper", name = "Time between sounds", default = P.SOUND_GAP, values = P.GAPS },
     { key = MASTER_KEY, name = "Play it on the Master channel (heard even with sound effects off)", default = false },
     { key = EACH_KEY, name = "Choose a sound per ability", default = false },
     { key = FOR_KEY, kind = "custom", default = {}, Build = BuildEach, Refresh = RefreshEach },

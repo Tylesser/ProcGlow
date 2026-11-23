@@ -31,6 +31,15 @@ A.SIDE_KEY = "procArtSide" -- both sides, or only the left / right / top / botto
 A.SIDE_EACH_KEY, A.SIDE_FOR_KEY = "procArtSideEach", "procArtSideFor" -- a side per ability (the same player, 2026-11-23)
 A.LOOK_EACH_KEY, A.LOOK_FOR_KEY = "procArtLookEach", "procArtLookFor" -- an art per ability (the user, 2026-11-23)
 A.COLOR_KEY, A.CUSTOM_KEY = "procArtColor", "procArtCustom" -- the tint of styles, arc and icon looks (2026-11-23)
+A.COLOR_FOR_KEY = "procArtColorFor" -- [proc name] = { r, g, b }: a colour per ability (2026-11-24, with the art per ability)
+-- 2026-11-24 (the user's "do all" of the suggestion list): the art only in combat, stacking procs building up (faint,
+-- in steps), and its place (an offset from the screen's middle, moved with A.Mover / in Edit Mode)
+A.COMBAT_KEY, A.BUILD_KEY, A.POS_KEY = "procArtCombat", "procArtBuild", "procArtPos"
+-- Codex art pieces drawn in steps (branding/source/proc-codex-art.py STAGED; the user's wish, 2026-11-24: the inner
+-- arc at one stack, both arcs at two, the emblem when the stacks are full): <key>_s1 / <key>_s2. Other looks build up
+-- faintly instead (the round stack marks of the first version are gone: the user didn't like them).
+A.STAGED = { heating_up = 2, echo_of_command = 2, echo_of_righteousness = 2, echo_of_justice = 2, echo_of_fury = 2,
+  echo_of_light = 2, echo_of_wisdom = 2 } -- [key] = steps before the full piece
 local BRAND = ns.PROC_BRAND or "Codex" -- (the standalone: "Proc Glow")
 local MEDIA = ns.PROC_MEDIA or ("Interface\\AddOns\\" .. addonName .. "\\Modules\\QoL\\Media\\")
 A.ARC = MEDIA .. "ProcSide"
@@ -92,8 +101,11 @@ end
 
 A.SIZES = { { 0.8, "Small" }, { 1, "Normal" }, { 1.25, "Large" } }
 A.ALPHAS = { { 0.4, "40 %" }, { 0.6, "60 %" }, { 0.8, "80 %" }, { 1, "100 %" } }
-A.SIDES = { { "both", "Both sides" }, { "left", "Left side only" }, { "right", "Right side only" },
-  { "top", "Top only" }, { "bottom", "Bottom only" } }
+A.SIDES = { { "both", "Both sides" }, { "topbottom", "Top and bottom" }, { "left", "Left side only" },
+  { "right", "Right side only" }, { "top", "Top only" }, { "bottom", "Bottom only" } }
+-- the two-place choices (a lone proc on both of its places): both sides, and above and below you (2026-11-24, the
+-- user's request); a second proc then takes the places across
+A.PAIRS = { both = { "left", "right" }, topbottom = { "top", "bottom" } }
 A.COLOR_CHOICES = { { "proc", "Each proc's own colour" }, { "glow", "The glow colour" }, { "custom", "Your colour" } }
 -- the option lists in ProcGlow.lua were made before this file ran: fill them in place
 for name, list in pairs(P.artLists or {}) do
@@ -164,10 +176,10 @@ function A.Alpha()
   return value and math.max(0.1, math.min(1, value)) or 0.8
 end
 
--- "both", "left", "right", "top" or "bottom".
+-- "both", "topbottom", "left", "right", "top" or "bottom".
 function A.Side()
   local value = Q.DB()[A.SIDE_KEY]
-  return A.ONE_SIDE[value] and value or "both"
+  return (A.ONE_SIDE[value] or A.PAIRS[value]) and value or "both"
 end
 
 -- The colours: tinted looks (styles, the arc, the icon's arc) take each proc's own colour by default (2026-11-23, the
@@ -221,8 +233,40 @@ function A.ProcColor(name)
   return key and A.COLORS[key] or nil
 end
 
--- The tint for a proc's styled / arc art.
+-- The Art colour option's Reset (2026-11-24): each proc's own colour again, the picked colour forgotten.
+function A.ResetColor()
+  Q.DB()[A.CUSTOM_KEY] = nil
+  Q.Set(A.COLOR_KEY, "proc") -- (its Changed repaints the art; the page and the gallery follow)
+  A.PaintGallery()
+end
+
+-- An ability's own colour ({ r, g, b }), or nil: only while "Choose the art per ability" is on.
+function A.ColorFor(name)
+  local db = Q.DB()
+  local list = db[A.LOOK_EACH_KEY] and type(name) == "string" and db[A.COLOR_FOR_KEY]
+  local c = type(list) == "table" and list[name]
+  if type(c) == "table" and Num(c[1]) and Num(c[2]) and Num(c[3]) then
+    return { c[1], c[2], c[3] }
+  end
+  return nil
+end
+
+function A.SetColorFor(name, color)
+  local db = Q.DB()
+  db[A.COLOR_FOR_KEY] = type(db[A.COLOR_FOR_KEY]) == "table" and db[A.COLOR_FOR_KEY] or {}
+  db[A.COLOR_FOR_KEY][name] = color and { color[1], color[2], color[3] } or nil
+  if Q.RefreshPage then
+    Q.RefreshPage()
+  end
+  A.Refresh()
+end
+
+-- The tint for a proc's styled / arc art: its own colour (per ability), else the Art colour option's.
 function A.TintFor(name)
+  local own = A.ColorFor(name)
+  if own then
+    return own
+  end
   local mode = A.ColorMode()
   if mode == "custom" then
     return A.CustomColor()
@@ -236,11 +280,29 @@ function A.TintFor(name)
   return P.Color()
 end
 
--- The game's colour picker for "Your colour": every change shows at once, Cancel puts the old colour back.
-function A.PickColor()
+-- The game's colour picker for "Your colour" (or, with a proc name, that ability's own colour): every change shows
+-- at once, Cancel puts the old colour back.
+function A.PickColor(name)
   local picker = ColorPickerFrame
   if type(picker) ~= "table" or type(picker.SetupColorPickerAndShow) ~= "function" then
     return false
+  end
+  if name then
+    local had = A.ColorFor(name)
+    local start = had or A.TintFor(name)
+    picker:SetupColorPickerAndShow({
+      r = start[1], g = start[2], b = start[3], hasOpacity = false,
+      swatchFunc = function()
+        local r, g, b = picker:GetColorRGB()
+        if Num(r) and Num(g) and Num(b) then
+          A.SetColorFor(name, { r, g, b })
+        end
+      end,
+      cancelFunc = function()
+        A.SetColorFor(name, had)
+      end,
+    })
+    return true
   end
   local db = Q.DB()
   local before = A.CustomColor()
@@ -282,13 +344,13 @@ function A.LookFor(name)
   return nil
 end
 
--- An ability's own side ("both", "left", "right", "top", "bottom"), or nil: it follows A.Side(). Only while
+-- An ability's own side ("both", "topbottom", "left", "right", "top", "bottom"), or nil: it follows A.Side(). Only while
 -- "Choose the side per ability" is on.
 function A.SideFor(name)
   local db = Q.DB()
   local own = db[A.SIDE_EACH_KEY] and type(name) == "string" and type(db[A.SIDE_FOR_KEY]) == "table"
     and db[A.SIDE_FOR_KEY][name]
-  if own == "both" or A.ONE_SIDE[own] then
+  if A.PAIRS[own] or A.ONE_SIDE[own] then
     return own
   end
   return nil
@@ -393,7 +455,7 @@ local function Anchor()
   end
   local anchor = CreateFrame("Frame", nil, UIParent)
   anchor:SetSize(A.LONG, A.LONG)
-  anchor:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+  anchor:SetPoint("CENTER", UIParent, "CENTER", A.Offset())
   anchor:SetFrameStrata("BACKGROUND")
   if anchor.EnableMouse then
     anchor:EnableMouse(false)
@@ -481,6 +543,23 @@ local function Piece(place)
   Animate(piece)
   A.pieces[place] = piece
   return piece
+end
+
+-- How strong a stacking proc's art is while it builds up: a third of the way at one stack of three, more with each.
+function A.FaintAlpha(count, stacks)
+  return 0.25 + 0.5 * math.max(0, math.min(count, stacks)) / math.max(1, stacks)
+end
+
+-- A stacking proc's step while it builds up: its Codex art's step file (A.STAGED), or nil (then it shows faintly).
+function A.StageArt(art, count, stacks)
+  local key = art and type(art.key) == "string" and art.key:match("^codex:(.+)$")
+  local steps = key and A.STAGED[key]
+  if not steps or not count or count < 1 then
+    return nil
+  end
+  local step = math.max(1, math.min(steps, math.floor(count * (steps + 1) / math.max(1, stacks or steps + 1))))
+  return { file = A.CODEX_DIR .. key .. "_s" .. step, where = "sides", key = "codex:" .. key .. "_s" .. step,
+    step = step }
 end
 
 -- Where a place sits against the box (0.8 x 256 square, as the game's own frame sets itself) (as the game's own frame): width, height, point, x, flips.
@@ -571,11 +650,19 @@ local function Place(piece, art)
   return ok
 end
 
-local function ShowPiece(place, art, name)
+local function ShowPiece(place, art, name, want)
   local piece = Piece(place)
   local again = piece:IsShown() and piece.key == name and not piece.leaving
   piece.key, piece.art, piece.leaving = name, art, nil
   Place(piece, art)
+  -- building up without a step of its own: fainter (the texture and the icon look's icons; the piece's own alpha is
+  -- its fade)
+  local strength = want and want.faint and not art.step and A.FaintAlpha(want.count or 0, want.stacks or 1) or 1
+  piece.texture:SetAlpha(strength)
+  for index, icon in ipairs(piece.icons or {}) do
+    icon:SetAlpha((A.SPOTS[index] and A.SPOTS[index][3] or 1) * strength)
+  end
+  piece.faint = want and want.faint or nil
   if piece.fadeOut and piece.fadeOut.Stop then
     piece.fadeOut:Stop()
   end
@@ -702,6 +789,7 @@ end
 -- adds the top, four the bottom. With one side chosen (A.Side): the first on that side (turned to face it), the second
 -- further out on the same side, then the two sides next to it.
 A.SLOTS = { { "left", "right", "top", "bottom" } }
+A.PAIR_ORDER = { both = { "left", "right", "top", "bottom" }, topbottom = { "top", "bottom", "left", "right" } }
 A.ONE_SIDE = {
   left = { "left", "left2", "top", "bottom" },
   right = { "right", "right2", "top", "bottom" },
@@ -721,9 +809,10 @@ function A.Place(list, wanted)
   local rest = {}
   for _, one in ipairs(list) do
     local own, placed = A.SideFor(one.name), false
-    if own == "both" then
-      if not wanted.left and not wanted.right then
-        wanted.left, wanted.right, placed = one, one, true
+    local pair = own and A.PAIRS[own]
+    if pair then
+      if not wanted[pair[1]] and not wanted[pair[2]] then
+        wanted[pair[1]], wanted[pair[2]], placed = one, one, true
       end
     elseif own then
       for _, place in ipairs(A.OWN[own]) do
@@ -736,13 +825,15 @@ function A.Place(list, wanted)
       rest[#rest + 1] = one
     end
   end
-  local order = A.ONE_SIDE[A.Side()]
+  local side = A.Side()
+  local order = A.ONE_SIDE[side]
   if not order then
+    local pair = A.PAIRS[side] or A.PAIRS.both
     if #rest == 1 and not next(wanted) then
-      wanted.left, wanted.right = rest[1], rest[1]
+      wanted[pair[1]], wanted[pair[2]] = rest[1], rest[1]
       return wanted
     end
-    order = A.SLOTS[1]
+    order = A.PAIR_ORDER[side] or A.SLOTS[1]
   end
   local function Next(places)
     for _, place in ipairs(places) do
@@ -768,11 +859,16 @@ function A.Show(names)
     if #list >= A.MAX then
       break
     end
-    local name, id = entry, nil
+    local name, id, extra = entry, nil, nil
     if type(entry) == "table" then
-      name, id = entry.name, entry.id
+      name, id, extra = entry.name, entry.id, entry
     end
-    list[#list + 1] = { art = A.ArtFor(name, id), name = name }
+    local art = A.ArtFor(name, id)
+    if extra and extra.faint then
+      art = A.StageArt(art, extra.count, extra.stacks) or art -- (a Codex art step: the arcs so far)
+    end
+    list[#list + 1] = { art = art, name = name, count = extra and extra.count,
+      stacks = extra and extra.stacks, faint = extra and extra.faint }
   end
   A.Place(list, wanted)
   if next(wanted) then
@@ -781,7 +877,7 @@ function A.Show(names)
     A.anchor:Show()
   end
   for place, want in pairs(wanted) do
-    ShowPiece(place, want.art, want.name)
+    ShowPiece(place, want.art, want.name, want)
   end
   for place, piece in pairs(A.pieces or {}) do
     if not wanted[place] then
@@ -844,12 +940,18 @@ function A.Rotate(names)
   ShowCurrent()
 end
 
--- From ProcGlow's update: `order` = the proc names Codex lit, first started first.
-function A.Update(order)
+-- Building up shows (the option, with the art on).
+function A.BuildOn()
+  return A.On() and Q.DB()[A.BUILD_KEY] ~= false
+end
+
+-- From ProcGlow's update: `order` = the proc names Codex lit, first started first; `build` = stacking procs still
+-- building up ({ name, count, stacks }); `stacks` = [name] = { count, stacks } of the lit stacking ones.
+function A.Update(order, build, stacks)
   if A.testing then
     return
   end
-  if not (P.started and A.On()) then
+  if not (P.started and A.On()) or (Q.DB()[A.COMBAT_KEY] and not (P.InCombat and P.InCombat())) then
     A.Rotate({})
     A.HideAll()
     return
@@ -857,7 +959,17 @@ function A.Update(order)
   -- no rotation any more: up to A.MAX procs show together (a waiting tick of an older rotation is stopped)
   local rotation = A.rotation
   rotation.running, rotation.gen, rotation.names = false, rotation.gen + 1, {}
-  A.Show(A.Names(order))
+  local names = A.Names(order)
+  for _, entry in ipairs(names) do
+    local seen = stacks and stacks[entry.name]
+    if seen then
+      entry.count, entry.stacks = seen.count, seen.stacks
+    end
+  end
+  for _, one in ipairs(build or {}) do
+    names[#names + 1] = { name = one.name, count = one.count, stacks = one.stacks, faint = true }
+  end
+  A.Show(names)
 end
 
 function A.HideAll()
@@ -869,6 +981,7 @@ end
 
 -- Settings changed (size, opacity, look): redraw what shows.
 function A.Refresh()
+  A.PaintGallery()
   if A.testing then
     A.Show(A.testNames)
     return
@@ -887,10 +1000,18 @@ A.TEST = TEST
 local TEST_CODEX = { PALADIN = "Echo of Command", WARLOCK = "Shadow Trance", WARRIOR = "Overpower", MAGE = "Clearcasting",
   DRUID = "Clearcasting", HUNTER = "Mongoose Bite", ROGUE = "Riposte", SHAMAN = "Clearcasting" }
 A.TEST_CODEX = TEST_CODEX
-function A.Test()
-  A.testing = true
+local function TestName()
   local codex = A.Look() == "codex" and TEST_CODEX[Class() or ""]
-  A.testNames = { codex or TEST[Class() or ""] or "Blade of Justice" }
+  return codex or TEST[Class() or ""] or "Blade of Justice"
+end
+
+-- A few seconds of art: one of your class's procs, or the one named (the preview panel's Play).
+function A.Test(name)
+  if A.moving then
+    return nil -- (the mover shows the art already)
+  end
+  A.testing = true
+  A.testNames = { name or TestName() }
   A.Show(A.testNames)
   local token = {}
   A.testToken = token
@@ -908,6 +1029,241 @@ function A.Test()
     C_Timer.After(3, Done)
   end
   return A.testNames[1]
+end
+
+-- The art's place ------------------------------------------------------------------------------------------------
+-- (2026-11-24, from the suggestion list: "Move the art") An offset from the screen's middle in db[A.POS_KEY]; the
+-- mover is a box of ours as big as the art round you, shown by the option's button or while Edit Mode is open
+-- (EventRegistry's "EditMode.Enter" / "EditMode.Exit", forever Blizzard_EditMode/Shared/EditModeManager.lua; the
+-- manager frame itself isn't hooked). Drag it; right-click puts the art back in the middle. The art of one of your
+-- procs shows while it is open.
+function A.Offset()
+  local pos = Q.DB()[A.POS_KEY]
+  if type(pos) == "table" and Num(pos[1]) and Num(pos[2]) then
+    return pos[1], pos[2]
+  end
+  return 0, 0
+end
+
+function A.PlaceAnchor()
+  local x, y = A.Offset()
+  if A.anchor then
+    A.anchor:ClearAllPoints()
+    A.anchor:SetPoint("CENTER", UIParent, "CENTER", x, y)
+  end
+  if A.mover and not A.mover.dragging then
+    A.mover:ClearAllPoints()
+    A.mover:SetPoint("CENTER", UIParent, "CENTER", x, y)
+  end
+end
+
+function A.SetOffset(x, y)
+  Q.DB()[A.POS_KEY] = (x ~= 0 or y ~= 0) and { x, y } or nil
+  A.PlaceAnchor()
+end
+
+function A.Mover()
+  if A.mover then
+    return A.mover
+  end
+  local UI = ns.UI
+  local frame = CreateFrame("Frame", (ns.PROC_FRAMES or "Codex") .. "ProcArtMover", UIParent)
+  frame:SetFrameStrata("DIALOG")
+  frame:SetClampedToScreen(true)
+  frame:SetMovable(true)
+  frame:EnableMouse(true)
+  frame:RegisterForDrag("LeftButton")
+  local accent = (ns.Theme and ns.Theme().accent) or { 1, 0.82, 0 }
+  frame.fill = frame:CreateTexture(nil, "BACKGROUND")
+  frame.fill:SetAllPoints()
+  frame.fill:SetColorTexture(accent[1], accent[2], accent[3], 0.16)
+  frame.label = UI.Text(frame, "body", 12, "bright")
+  frame.label:SetPoint("CENTER")
+  frame.label:SetJustifyH("CENTER")
+  frame.label:SetText((ns.PROC_ART_NAME or "Proc art") .. "\nDrag to move it. Right-click: back to the middle.")
+  frame:SetScript("OnDragStart", function(self)
+    self.dragging = true
+    self:StartMoving()
+  end)
+  frame:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    self.dragging = false
+    local cx, cy = self:GetCenter()
+    local ux, uy = UIParent:GetCenter()
+    if Num(cx) and Num(cy) and Num(ux) and Num(uy) then
+      A.SetOffset(math.floor(cx - ux + 0.5), math.floor(cy - uy + 0.5))
+    end
+  end)
+  frame:SetScript("OnMouseUp", function(_, button)
+    if button == "RightButton" then
+      A.SetOffset(0, 0)
+    end
+  end)
+  frame:Hide()
+  A.mover = frame
+  A.PlaceAnchor()
+  return frame
+end
+
+-- Shows or hides the mover (nil = the other way round).
+function A.ToggleMover(show)
+  local mover = A.Mover()
+  if show == nil then
+    show = not mover:IsShown()
+  end
+  local size = A.Size()
+  mover:SetSize((A.LONG + 2 * A.SHORT) * size, A.LONG * size)
+  A.PlaceAnchor()
+  mover:SetShown(show and true or false)
+  if show then
+    A.moving, A.testing = true, true
+    A.testNames = { TestName() }
+    A.Show(A.testNames)
+  elseif A.moving then
+    A.moving, A.testing = false, false
+    A.HideAll()
+    if P.started then
+      P.Update()
+    end
+  end
+  return show
+end
+
+function A.HookEditMode()
+  if A.editHooked or type(EventRegistry) ~= "table" or type(EventRegistry.RegisterCallback) ~= "function" then
+    return
+  end
+  A.editHooked = true
+  pcall(EventRegistry.RegisterCallback, EventRegistry, "EditMode.Enter", function()
+    if P.started and A.On() then
+      A.ToggleMover(true)
+    end
+  end, A)
+  pcall(EventRegistry.RegisterCallback, EventRegistry, "EditMode.Exit", function()
+    if A.mover and A.mover:IsShown() then
+      A.ToggleMover(false)
+    end
+  end, A)
+end
+
+-- The preview beside the per-ability lists (art and side; the user's requests, 2026-11-23): one proc's art as it
+-- would show round you, on its side (both = left and right, else left, right, top or bottom: the side piece turned a
+-- quarter, outer edge outwards), tinted like the real one (its own colour too), the icon look's icon on each piece;
+-- under it the proc's name, its art and side. The glow's preview stays beside the glow style (the user, 2026-11-24).
+-- panel.ShowArt(name) draws a proc; nil empties it.
+A.PREVIEW_W, A.PREVIEW_H = 160, 204 -- (Play under the lines: the proc's art, glow and sound together, 2026-11-24)
+local SCENE_H, PIECE, GAP = 124, 36, 10 -- piece = the short edge (side pieces are 1:2)
+-- the side file's corners for each place (SetTexCoord's eight: UL, LL, UR, LR), outer edge outwards
+A.PREVIEW_COORDS = {
+  left = { 0, 0, 0, 1, 1, 0, 1, 1 },
+  right = { 1, 0, 1, 1, 0, 0, 0, 1 },
+  top = { 0, 1, 1, 1, 0, 0, 1, 0 },
+  bottom = { 1, 0, 0, 0, 1, 1, 0, 1 },
+}
+local PREVIEW_PLACES = { both = { "left", "right" }, topbottom = { "top", "bottom" }, left = { "left" },
+  right = { "right" }, top = { "top" }, bottom = { "bottom" } }
+
+local function ChoiceName(list, value)
+  for _, entry in ipairs(list) do
+    if entry[1] == value then
+      return entry[2]
+    end
+  end
+  return nil
+end
+
+function A.PreviewPanel(parent)
+  local UI = ns.UI
+  local panel = CreateFrame("Frame", nil, parent)
+  panel:SetSize(A.PREVIEW_W, A.PREVIEW_H)
+  local back = panel:CreateTexture(nil, "BACKGROUND")
+  back:SetAllPoints()
+  back:SetColorTexture(0, 0, 0, 0.35)
+  local scene = CreateFrame("Frame", nil, panel)
+  scene:SetPoint("TOPLEFT", 0, 0)
+  scene:SetPoint("TOPRIGHT", 0, 0)
+  scene:SetHeight(SCENE_H)
+  panel.scene = scene
+  panel.pieces, panel.icons = {}, {}
+  for place, coords in pairs(A.PREVIEW_COORDS) do
+    local piece = scene:CreateTexture(nil, "ARTWORK")
+    local across = place == "top" or place == "bottom"
+    piece:SetSize(across and PIECE * 2 or PIECE, across and PIECE or PIECE * 2)
+    if place == "left" then
+      piece:SetPoint("RIGHT", scene, "CENTER", -GAP, 0)
+    elseif place == "right" then
+      piece:SetPoint("LEFT", scene, "CENTER", GAP, 0)
+    elseif place == "top" then
+      piece:SetPoint("BOTTOM", scene, "CENTER", 0, GAP)
+    else
+      piece:SetPoint("TOP", scene, "CENTER", 0, -GAP)
+    end
+    piece:SetTexCoord(coords[1], coords[2], coords[3], coords[4], coords[5], coords[6], coords[7], coords[8])
+    local icon = scene:CreateTexture(nil, "BORDER")
+    icon:SetSize(16, 16)
+    icon:SetPoint("CENTER", piece, "CENTER")
+    panel.pieces[place], panel.icons[place] = piece, icon
+  end
+  local function Line(kind, size, color, above, gap)
+    local text = UI.Text(panel, kind, size, color)
+    if above then
+      text:SetPoint("TOPLEFT", above, "BOTTOMLEFT", 0, -gap)
+    else
+      text:SetPoint("TOPLEFT", panel, "TOPLEFT", 6, -(SCENE_H + 2))
+    end
+    text:SetPoint("RIGHT", panel, "RIGHT", -6, 0)
+    text:SetJustifyH("CENTER")
+    return text
+  end
+  panel.name = Line("body", 12, "bright")
+  panel.look = Line("body", 11, "muted", panel.name, 3)
+  panel.side = Line("body", 11, "muted", panel.look, 2)
+  panel.play = UI.Button(panel, 70, 22, "Play")
+  panel.play:SetPoint("BOTTOM", panel, "BOTTOM", 0, 6)
+  panel.play:SetScript("OnClick", function()
+    if panel.current and P.TestProc then
+      P.TestProc(panel.current)
+    end
+  end)
+
+  function panel.ShowArt(name)
+    panel.current = name
+    local art = name and A.ArtFor(name)
+    local side = name and (A.SideFor(name) or A.Side()) or "both"
+    local shown = {}
+    for _, place in ipairs(PREVIEW_PLACES[side] or PREVIEW_PLACES.both) do
+      shown[place] = true
+    end
+    local color = art and art.tint and art.color
+    for place, piece in pairs(panel.pieces) do
+      local on = art and shown[place] and true or false
+      piece:SetShown(on)
+      panel.icons[place]:SetShown(on and art.icon and true or false)
+      if on then
+        piece:SetTexture(art.file)
+        if color then
+          piece:SetVertexColor(color[1], color[2], color[3])
+        else
+          piece:SetVertexColor(1, 1, 1)
+        end
+        if piece.SetBlendMode then
+          piece:SetBlendMode(color and "ADD" or "BLEND")
+        end
+        if art.icon then
+          panel.icons[place]:SetTexture(art.icon)
+        end
+      end
+    end
+    panel.name:SetText(name or "")
+    local look = A.LookFor(name) or A.Look()
+    local text = ChoiceName(A.LOOKS, look)
+    if art and look == "codex" and art.key == "icon" then
+      text = "The spell's icon"
+    end
+    panel.look:SetText(name and ("Art: " .. (text or look)) or "")
+    panel.side:SetText(name and ("Side: " .. (ChoiceName(A.SIDES, side) or side)) or "")
+  end
+  return panel
 end
 
 -- The gallery: every Codex art piece, both sides, with its proc and class (the option's "Show all arts").
@@ -963,15 +1319,9 @@ function A.Gallery()
       right:SetPoint("TOPLEFT", cell, "TOP", 0, -8)
       right:SetTexture(A.CODEX_DIR .. entry[1])
       right:SetTexCoord(1, 0, 0, 1)
-      if entry.tint then
-        local mode = A.ColorMode()
-        local color = mode == "custom" and A.CustomColor() or mode == "glow" and P.Color() or entry.tint
-        for _, side in ipairs({ left, right }) do
-          side:SetVertexColor(color[1], color[2], color[3])
-          if side.SetBlendMode then
-            side:SetBlendMode("ADD")
-          end
-        end
+      if entry.tint and left.SetBlendMode then
+        left:SetBlendMode("ADD")
+        right:SetBlendMode("ADD")
       end
       local name = UI.Text(cell, "body", 12, "bright")
       name:SetPoint("TOP", left, "BOTTOM", 56 / 2 + 0, -6)
@@ -985,12 +1335,30 @@ function A.Gallery()
       class:SetPoint("RIGHT", cell, "RIGHT", -4, 0)
       class:SetJustifyH("CENTER")
       class:SetText(entry[3])
-      cell.key, cell.left, cell.right, cell.name = entry[1], left, right, name
+      cell.key, cell.left, cell.right, cell.name, cell.tint = entry[1], left, right, name, entry.tint
       frame.cells[index] = cell
     end
     frame:Hide()
     A.gallery = frame
   end
   frame:SetShown(not frame:IsShown())
+  A.PaintGallery()
   return frame
+end
+
+-- The gallery's styles in the Art colour (each style's own colour, the glow colour or yours), again after every
+-- colour change while it is open (the user's "when the art's colour changes, change it in the preview", 2026-11-24).
+function A.PaintGallery()
+  local frame = A.gallery
+  if not frame then
+    return
+  end
+  local mode = A.ColorMode()
+  for _, cell in ipairs(frame.cells or {}) do
+    if cell.tint then
+      local color = mode == "custom" and A.CustomColor() or mode == "glow" and P.Color() or cell.tint
+      cell.left:SetVertexColor(color[1], color[2], color[3])
+      cell.right:SetVertexColor(color[1], color[2], color[3])
+    end
+  end
 end
