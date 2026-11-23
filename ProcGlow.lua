@@ -89,9 +89,27 @@ for _, echo in ipairs({ { "Fury", 1311701 }, { "Command", 1311703 }, { "Righteou
     secretStacks = true, notActive = true, spells = P.SEALS, seal = "Seal of " .. echo[1] }
 end
 
--- The game's own sounds: { key, text, SOUNDKIT name, its ID, group } (names and IDs from
--- Blizzard_SharedXML/Mainline/SoundKitConstants.lua, the file Forever loads; the ID is used when SOUNDKIT lacks one).
+-- The sounds: { key, text, SOUNDKIT name, its ID, group }; the game's own (names and IDs from
+-- Blizzard_SharedXML/Mainline/SoundKitConstants.lua, the file Forever loads; the ID is used when SOUNDKIT lacks one),
+-- and Codex's own (group "codex", `file` in Media/Sounds: made by branding/source/proc-sounds.py from sine waves and
+-- noise, 2026-11-23: the user's "more suitable sounds for procs", then "more related to spells, not random sounds"),
+-- played with PlaySoundFile. "match" plays each proc the sound made for it (P.PROC_SOUNDS).
 P.SOUNDS = {
+  { "match", "Each proc's own sound", group = "codex" },
+  { "sword_clash", "Blades clash", group = "codex", file = "sword_clash" },
+  { "shield_bash", "Shield bash", group = "codex", file = "shield_bash" },
+  { "axe_chop", "Axe blow", group = "codex", file = "axe_chop" },
+  { "victory", "Victory horn", group = "codex", file = "victory" },
+  { "parry", "Parry", group = "codex", file = "parry" },
+  { "beast_snap", "Beast snap", group = "codex", file = "beast_snap" },
+  { "holy_hammer", "Holy hammer", group = "codex", file = "holy_hammer" },
+  { "holy_echo", "Holy echo", group = "codex", file = "holy_echo" },
+  { "shadow", "Shadow whisper", group = "codex", file = "shadow" },
+  { "arcane", "Arcane shimmer", group = "codex", file = "arcane" },
+  { "missiles", "Arcane missiles", group = "codex", file = "missiles" },
+  { "fire", "Fire catching", group = "codex", file = "fire" },
+  { "nature", "Nature chimes", group = "codex", file = "nature" },
+  { "lightning", "Lightning crackle", group = "codex", file = "lightning" },
   { "ping", "Map ping", "MAP_PING", 3175, "soft" },
   { "whisper", "Whisper", "TELL_MESSAGE", 3081, "soft" },
   { "coin", "Loot coin", "LOOT_WINDOW_COIN_SOUND", 120, "soft" },
@@ -1435,9 +1453,24 @@ function P.Usable(slot, id)
 end
 
 -- Can the spell be cast right now? Not while it lacks mana (rage, energy) or is otherwise unusable, nor while its
--- cooldown or the global cooldown runs (the user's request, 2026-11-20: the proc art only when the proc can be used).
--- Returns castable, and when a cooldown is what stops it, the time it ends. Secret or missing values count as
--- castable (the art shows as before).
+-- own cooldown runs (the user's request, 2026-11-20: the proc art only when the proc can be used). The global
+-- cooldown doesn't count (2026-11-23: Heating Up's art blinked out after every Fireball): a cooldown the game says is
+-- the global one (activeCategory = Constants.SpellCooldownConsts.GLOBAL_RECOVERY_CATEGORY, or isOnGCD, as
+-- Blizzard_CooldownViewer reads them), or one of 1.5 s or less, keeps it lit. Returns castable, and when a cooldown
+-- is what stops it, the time it ends. Secret or missing values count as castable (the art shows as before).
+P.GCD_MAX = 1.5
+function P.OnGCD(cooldown, duration)
+  local consts = Constants and Constants.SpellCooldownConsts
+  local category = Num(cooldown.activeCategory)
+  if category and consts and category == consts.GLOBAL_RECOVERY_CATEGORY then
+    return true
+  end
+  if cooldown.isOnGCD == true then
+    return true
+  end
+  return duration <= P.GCD_MAX
+end
+
 function P.Castable(id)
   if not id then
     return true
@@ -1456,7 +1489,7 @@ function P.Castable(id)
   local cooldown = C_Spell and C_Spell.GetSpellCooldown and Ask(C_Spell.GetSpellCooldown, id)
   if type(cooldown) == "table" then
     local start, duration = Num(cooldown.startTime), Num(cooldown.duration)
-    if start and duration and start > 0 and duration > 0 then
+    if start and duration and start > 0 and duration > 0 and not P.OnGCD(cooldown, duration) then
       local ends = start + duration
       if ends - GetTime() > 0.05 then
         return false, ends
@@ -1624,9 +1657,51 @@ end
 
 -- Sound ----------------------------------------------------------------------------------------------------------
 
+-- Which of our sounds was made for which proc (lower-case proc name); a proc not listed (one the game lights, such
+-- as Blade of Justice) gets its class's.
+P.PROC_SOUNDS = {
+  ["overpower"] = "sword_clash", ["revenge"] = "shield_bash", ["execute"] = "axe_chop", ["victory rush"] = "victory",
+  ["riposte"] = "parry", ["counterattack"] = "parry", ["mongoose bite"] = "beast_snap",
+  ["hammer of wrath"] = "holy_hammer", ["blade of justice"] = "holy_hammer", ["art of war"] = "holy_hammer",
+  ["unsealed wrath"] = "holy_echo", ["shadow trance"] = "shadow", ["nightfall"] = "shadow",
+  ["missile barrage"] = "missiles", ["heating up"] = "fire", ["hot streak"] = "fire", ["pyroblast"] = "fire",
+}
+P.CLEARCASTING_SOUNDS = { MAGE = "arcane", DRUID = "nature", SHAMAN = "lightning" }
+P.CLASS_SOUNDS = { WARRIOR = "sword_clash", ROGUE = "parry", HUNTER = "beast_snap", PALADIN = "holy_echo",
+  PRIEST = "holy_echo", WARLOCK = "shadow", MAGE = "arcane", DRUID = "nature", SHAMAN = "lightning",
+  DEATHKNIGHT = "sword_clash" }
+
+-- The sound made for a proc (its name; nil = the class's).
+function P.MatchSound(key)
+  local name = Lower(key)
+  local class = PlayerClass() or ""
+  if name and name:find("^echo of ") then
+    return "holy_echo"
+  end
+  if name == "clearcasting" then
+    return P.CLEARCASTING_SOUNDS[class] or "arcane"
+  end
+  return (name and P.PROC_SOUNDS[name]) or P.CLASS_SOUNDS[class] or "arcane"
+end
+
+-- A picked sound for a proc: "match" becomes the proc's own.
+function P.ResolveSound(choice, key)
+  if choice == "match" then
+    return P.MatchSound(key)
+  end
+  return choice
+end
+
+-- Codex's own sound files (the standalone: its flat Media folder).
+P.SOUND_DIR = MEDIA .. "Sounds\\"
+
+-- A choice's sound: the SOUNDKIT ID of one of the game's, or the path of one of ours (second return true).
 local function SoundKit(choice)
   for _, sound in ipairs(P.SOUNDS) do
     if sound[1] == choice then
+      if sound.file then
+        return P.SOUND_DIR .. sound.file .. ".ogg", true
+      end
       if not sound[3] then
         return nil
       end
@@ -1643,19 +1718,27 @@ function P.SoundFor(key)
   local db = Q.DB()
   local own = db[EACH_KEY] and key and type(db[FOR_KEY]) == "table" and db[FOR_KEY][key]
   if own and own ~= "same" then
-    return own
+    return P.ResolveSound(own, key)
   end
-  return db[KIT_KEY]
+  return P.ResolveSound(db[KIT_KEY], key)
 end
 
 -- Plays a sound once (choice: a P.SOUNDS key, default the main one). True when a sound was played.
 function P.Play(choice)
   local db = Q.DB()
-  local kit = SoundKit(choice or db[KIT_KEY])
+  local kit, file = SoundKit(P.ResolveSound(choice or db[KIT_KEY]))
+  local channel = db[MASTER_KEY] and "Master" or "SFX"
+  if file then
+    if type(PlaySoundFile) ~= "function" then
+      return false
+    end
+    local ok = pcall(PlaySoundFile, kit, channel)
+    return ok
+  end
   if not kit or type(PlaySound) ~= "function" then
     return false
   end
-  local ok = pcall(PlaySound, kit, db[MASTER_KEY] and "Master" or "SFX")
+  local ok = pcall(PlaySound, kit, channel)
   return ok
 end
 
@@ -1869,10 +1952,10 @@ function P.SoundChoices(withSame)
   if withSame then
     list[#list + 1] = { "same", "Same as the main sound" }
   end
-  for _, group in ipairs({ { "soft", "Soft" }, { "loud", "Loud" } }) do
+  for _, group in ipairs({ { "codex", BRAND .. "'s own" }, { "soft", "Soft" }, { "loud", "Loud" } }) do
     list[#list + 1] = { title = group[2] }
     for _, sound in ipairs(P.SOUNDS) do
-      if sound[5] == group[1] then
+      if (sound.group or sound[5]) == group[1] then
         list[#list + 1] = { sound[1], sound[2] }
       end
     end
@@ -1899,69 +1982,89 @@ end
 
 local ROW = 26
 
--- The per-ability list on the page: one row per proc (name, sound picker, Test); shown while "Choose a sound per
--- ability" is on.
-local function BuildEach(parent, last, sub)
-  local box = CreateFrame("Frame", nil, parent)
-  box:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 26, -4)
-  box:SetPoint("RIGHT", 0, 0)
-  box:SetHeight(1)
-  sub.holder, sub.rows = box, {}
-  local choices = P.SoundChoices(true)
-  for index, key in ipairs(P.SoundKeys()) do
-    local row = CreateFrame("Frame", nil, box)
-    row:SetHeight(ROW - 2)
-    row:SetPoint("TOPLEFT", box, "TOPLEFT", 0, -(index - 1) * ROW)
-    row:SetPoint("RIGHT", 0, 0)
-    row.key = key
-    row.label = ns.UI.Text(row, "body", 12, "text")
-    row.label:SetPoint("LEFT", 0, 0)
-    row.label:SetWidth(130)
-    row.label:SetJustifyH("LEFT")
-    row.label:SetText(key)
-    row.picker = ns.UI.Picker(row, 190, 22)
-    row.picker:SetPoint("LEFT", 136, 0)
-    row.picker:SetScript("OnClick", function(self)
-      Q.OpenChoice(self, choices, (Q.DB()[FOR_KEY] or {})[key] or "same", function(value)
-        P.SetSoundFor(key, value)
+-- A per-ability list on the page: one row per proc (name, a picker, optionally a Test button); shown while its
+-- switch (eachKey) is on. The choice is saved in db[forKey][proc name]; "same" (the first choice) saves nothing.
+-- Used for the sound per ability and the art side per ability.
+local function EachList(eachKey, forKey, Choices, Test, Off)
+  local function Build(parent, last, sub)
+    local box = CreateFrame("Frame", nil, parent)
+    box:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 26, -4)
+    box:SetPoint("RIGHT", 0, 0)
+    box:SetHeight(1)
+    sub.holder, sub.rows = box, {}
+    for index, key in ipairs(P.SoundKeys()) do
+      local row = CreateFrame("Frame", nil, box)
+      row:SetHeight(ROW - 2)
+      row:SetPoint("TOPLEFT", box, "TOPLEFT", 0, -(index - 1) * ROW)
+      row:SetPoint("RIGHT", 0, 0)
+      row.key = key
+      row.label = ns.UI.Text(row, "body", 12, "text")
+      row.label:SetPoint("LEFT", 0, 0)
+      row.label:SetWidth(130)
+      row.label:SetJustifyH("LEFT")
+      row.label:SetText(key)
+      row.picker = ns.UI.Picker(row, 190, 22)
+      row.picker:SetPoint("LEFT", 136, 0)
+      row.picker:SetScript("OnClick", function(self)
+        Q.OpenChoice(self, Choices(), (Q.DB()[forKey] or {})[key] or "same", function(value)
+          P.SetFor(forKey, key, value)
+        end)
       end)
-    end)
-    row.test = ns.UI.Button(row, 60, 22, "Test")
-    row.test:SetPoint("LEFT", row.picker, "RIGHT", 8, 0)
-    row.test:SetScript("OnClick", function()
-      local db = Q.DB()
-      local own = (db[FOR_KEY] or {})[key]
-      P.Play(own and own ~= "same" and own or db[KIT_KEY])
-    end)
-    sub.rows[index] = row
+      if Test then
+        row.test = ns.UI.Button(row, 60, 22, "Test")
+        row.test:SetPoint("LEFT", row.picker, "RIGHT", 8, 0)
+        row.test:SetScript("OnClick", function()
+          Test(key)
+        end)
+      end
+      sub.rows[index] = row
+    end
+    sub.count = #sub.rows
+    return box
   end
-  sub.count = #sub.rows
-  return box
+  local function Refresh(sub, on)
+    local db = Q.DB()
+    local open = db[eachKey] and true or false
+    local enabled = on and not (Off and Off()) and true or false
+    sub.holder:SetHeight(open and sub.count * ROW or 1)
+    local choices = Choices()
+    for _, row in ipairs(sub.rows) do
+      row:SetShown(open)
+      local value = (db[forKey] or {})[row.key] or "same"
+      row.picker:SetText(Q.ChoiceText({ choices = choices }, value))
+      row.picker:SetEnabled(enabled)
+      if row.test then
+        row.test:SetEnabled(enabled)
+      end
+      row:SetAlpha(enabled and 1 or 0.5)
+    end
+  end
+  return Build, Refresh
 end
 
-local function RefreshEach(sub, on)
+function P.SetFor(forKey, key, value)
   local db = Q.DB()
-  local open = db[EACH_KEY] and true or false
-  sub.holder:SetHeight(open and sub.count * ROW or 1)
-  local choices = P.SoundChoices(true)
-  for _, row in ipairs(sub.rows) do
-    row:SetShown(open)
-    local value = (db[FOR_KEY] or {})[row.key] or "same"
-    row.picker:SetText(Q.ChoiceText({ choices = choices }, value))
-    row.picker:SetEnabled(on)
-    row.test:SetEnabled(on)
-    row:SetAlpha(on and 1 or 0.5)
+  db[forKey] = type(db[forKey]) == "table" and db[forKey] or {}
+  db[forKey][key] = value ~= "same" and value or nil
+  local option = Q.Option(forKey)
+  if option and option.Changed then
+    option.Changed()
   end
-end
-
-function P.SetSoundFor(key, value)
-  local db = Q.DB()
-  db[FOR_KEY] = type(db[FOR_KEY]) == "table" and db[FOR_KEY] or {}
-  db[FOR_KEY][key] = value ~= "same" and value or nil
   if Q.RefreshPage then
     Q.RefreshPage()
   end
 end
+
+function P.SetSoundFor(key, value)
+  P.SetFor(FOR_KEY, key, value)
+end
+
+local BuildEach, RefreshEach = EachList(EACH_KEY, FOR_KEY, function() return P.SoundChoices(true) end,
+  function(key)
+    local db = Q.DB()
+    local own = (db[FOR_KEY] or {})[key]
+    P.Play(P.ResolveSound(own and own ~= "same" and own or db[KIT_KEY], key))
+  end)
 
 local function Repainted()
   if Q.running then
@@ -1984,11 +2087,31 @@ local function ArtRefresh()
 end
 
 -- ProcArt.lua's list, filled in place once it loads (the options table is made before it runs).
-local artLists = { LOOKS = {}, SIZES = {}, ALPHAS = {} }
+local artLists = { LOOKS = {}, SIZES = {}, ALPHAS = {}, SIDES = {}, COLOR_CHOICES = {} }
 P.artLists = artLists
 local function ArtChoice(name)
   return artLists[name]
 end
+
+-- The art side per ability: "Same as Art side" first, then the sides.
+local function SideChoices()
+  local list = { { "same", "Same as Art side" } }
+  for _, side in ipairs(artLists.SIDES) do
+    list[#list + 1] = side
+  end
+  return list
+end
+local BuildSides, RefreshSides = EachList("procArtSideEach", "procArtSideFor", SideChoices, nil, ArtOff)
+
+-- The art per ability: "Same as Art" first, then every look and style.
+local function LookChoices()
+  local list = { { "same", "Same as Art" } }
+  for _, look in ipairs(artLists.LOOKS) do
+    list[#list + 1] = look
+  end
+  return list
+end
+local BuildLooks, RefreshLooks = EachList("procArtLookEach", "procArtLookFor", LookChoices, nil, ArtOff)
 
 local function NotForAlert(what)
   return function()
@@ -2007,7 +2130,7 @@ Q.AddToggle({
     .. "with Shadow Trance (Nightfall), Arcane Missiles with Missile Barrage and Pyroblast at 3 stacks of Heating Up "
     .. "(mage). Clearcasting shows only its art beside you, no glow on the buttons. What the game already lights itself "
     .. "keeps the game's glow. With the art on, the "
-    .. "game's proc art shows on both sides of your character too (two swords for Blade of Justice).",
+    .. "game's proc art shows beside your character too (two swords for Blade of Justice), on both sides or one.",
   order = 50,
   -- (Codex: left to the standalone Tylesser - Proc Glow while it is loaded; the standalone has no ns.IsAddOnLoaded)
   Elsewhere = function()
@@ -2054,6 +2177,19 @@ Q.AddToggle({
       Disabled = ArtOff },
     { key = "procArtLook", kind = "choice", name = "Art", default = "codex", choices = ArtChoice("LOOKS"),
       Changed = ArtRefresh, Disabled = ArtOff },
+    { key = "procArtColor", kind = "choice", name = "Art colour", default = "proc", choices = ArtChoice("COLOR_CHOICES"),
+      button = { name = "Pick", Click = function() if P.art then P.art.PickColor() end end },
+      Changed = ArtRefresh, Disabled = ArtOff },
+    { key = "procArtSide", kind = "choice", name = "Art side", default = "both", choices = ArtChoice("SIDES"),
+      Changed = ArtRefresh, Disabled = ArtOff },
+    { key = "procArtSideEach", name = "Choose the side per ability", default = false, Changed = ArtRefresh,
+      Disabled = ArtOff },
+    { key = "procArtSideFor", kind = "custom", default = {}, Build = BuildSides, Refresh = RefreshSides,
+      Changed = ArtRefresh },
+    { key = "procArtLookEach", name = "Choose the art per ability", default = false, Changed = ArtRefresh,
+      Disabled = ArtOff },
+    { key = "procArtLookFor", kind = "custom", default = {}, Build = BuildLooks, Refresh = RefreshLooks,
+      Changed = ArtRefresh },
     { key = "procArtGallery", kind = "button", name = "Show all arts",
       Click = function() if P.art then P.art.Gallery() end end },
     { key = "procArtSize", kind = "stepper", name = "Art size", default = 1, values = ArtChoice("SIZES"),

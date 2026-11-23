@@ -11,8 +11,8 @@ A World of Warcraft addon for **WoW Forever** that makes your **action buttons g
 - What the game already lights itself keeps the game's glow.
 - **Glow styles**: the game's spell alert, a pulsing border, marching sparkles, a soft glow, a flash or a ring, with a preview. Colour (gold, class or a fixed colour), pulse speed and thickness.
 - **Cooldown manager**: the glow on its icons too, and optionally in place of the game's square glow.
-- **Art beside your character**: a piece drawn for each proc, the game's own art, the spell's icon or a plain arc. Several procs show together: two left and right, a third on top, a fourth below. Size and opacity, with "Show the art" and "Show all arts".
-- **Sound** when a proc starts (off until you switch it on): 14 of the game's sounds, soft or loud, only in combat if you like, on the Master channel if you want, and a different sound per ability.
+- **Art beside your character**: a piece drawn for each proc, sixteen styles for any proc (flames, runes, feathers, crescent moons, lightning, vines, crystal shards, stars, swords, daggers, arrows, claw marks, skulls, snowflakes, rays of light, arcane sigils), the spell's icon or a plain arc, for all procs or per ability. Each proc shows in its own colour, or in the glow colour or one you pick. Several procs show together: two left and right, a third on top, a fourth below; or all on one side you choose, left, right, top or bottom (**Art side**). Each ability can also get a side of its own. Size and opacity, with "Show the art" and "Show all arts".
+- **Sound** when a proc starts (off until you switch it on): 14 sounds made for procs (or each proc its own: blades for Overpower, fire for Heating Up, ...) and 14 of the game's, soft or loud, only in combat if you like, on the Master channel if you want, and a different sound per ability.
 
 If you use Codex, its own proc glow does the same; while this addon is loaded, Codex leaves the job to it.
 

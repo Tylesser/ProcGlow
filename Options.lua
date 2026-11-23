@@ -10,7 +10,7 @@ local Q = ns.qol
 local P = Q.procglow
 
 local LABEL_WIDTH, PICKER_WIDTH, ROW, GAP = 200, 220, 26, 6
-local panel, content, rows = nil, nil, {}
+local panel, content, rows, items = nil, nil, {}, {}
 
 local function Value(key)
   return Q.DB()[key]
@@ -21,9 +21,8 @@ local function MainOn()
 end
 
 -- One row per option, stacked; returns the row (with :Refresh()).
-local function OptionRow(parent, option, y, width)
+local function OptionRow(parent, option, width)
   local row = CreateFrame("Frame", nil, parent)
-  row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -y)
   row:SetSize(width, ROW)
   row.option = option
   local kind = option.kind or "check"
@@ -140,6 +139,28 @@ local function OptionRow(parent, option, y, width)
   return row
 end
 
+-- Stacks the rows and the per-ability lists (custom options) top down; a list's height changes as it opens.
+local function Layout()
+  local y = panel.top or 0
+  for _, item in ipairs(items) do
+    if item.row then
+      item.row:ClearAllPoints()
+      item.row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+      y = y + item.row:GetHeight() + GAP + item.extra
+    else
+      local holder = item.sub.holder
+      if holder then
+        holder:ClearAllPoints()
+        holder:SetPoint("TOPLEFT", content, "TOPLEFT", 26, -y)
+        holder:SetPoint("RIGHT", content, "RIGHT", 0, 0)
+        local height = holder:GetHeight() or 0
+        y = y + (height > 1 and height + GAP or 0)
+      end
+    end
+  end
+  content:SetHeight(y + 40)
+end
+
 local function Refresh()
   if not panel then
     return
@@ -150,13 +171,13 @@ local function Refresh()
   for _, row in ipairs(rows) do
     row.Refresh()
   end
-  if panel.custom then
-    local option, sub = panel.custom.option, panel.custom.sub
-    if option.Refresh then
-      option.Refresh(sub, MainOn())
+  for _, item in ipairs(items) do
+    if item.sub and item.option.Refresh then
+      item.option.Refresh(item.sub, MainOn())
     end
-    local height = sub.holder and sub.holder:GetHeight() or 0
-    content:SetHeight(panel.custom.top + height + 40)
+  end
+  if content then
+    Layout()
   end
   if P and P.ShowPreview then
     P.ShowPreview()
@@ -187,20 +208,21 @@ local function Build()
   desc:SetText(toggle.desc or "")
   local y = 30 + math.max(28, math.ceil((#(toggle.desc or "")) / 95) * 13) + 12
 
+  panel.top, panel.items = y, items
   for _, option in ipairs(toggle.options or {}) do
     if option.kind == "custom" then
-      local last = rows[#rows] or main
       local sub = {}
-      option.Build(content, last, sub)
-      panel.custom = { option = option, sub = sub, top = y }
+      option.Build(content, rows[#rows] or main, sub) -- (placed by Layout)
+      items[#items + 1] = { option = option, sub = sub }
     else
-      local row = OptionRow(content, option, y, width)
+      local row = OptionRow(content, option, width)
       rows[#rows + 1] = row
       local extra = (option.desc and (option.kind or "check") == "check") and 14 or 0
-      y = y + row:GetHeight() + GAP + extra + (option.kind == "choice" and option.Disabled and 10 or 0)
+      items[#items + 1] = { option = option, row = row,
+        extra = extra + (option.kind == "choice" and option.Disabled and 10 or 0) }
     end
   end
-  content:SetHeight(y + 40)
+  Layout()
 end
 
 local function CreateOptions()

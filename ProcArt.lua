@@ -7,14 +7,15 @@ local addonName, ns = ...
 -- shows art on SPELL_ACTIVATION_OVERLAY_SHOW (spellID, overlayFileDataID, locationType, scale, r, g, b), but
 -- Forever's spell data sends that for next to nothing: the side art never shows, while the buttons still light on
 -- SPELL_ACTIVATION_OVERLAY_GLOW_SHOW (spellID). So Codex draws its own: for every proc that is lit (Codex's own list,
--- and every spell the game lights with the glow event), the game's art for it from P.ART (its FileDataID; each
--- file's size, read from the BLP header, says where it goes: 128x256 = left and right, 256x128 = above), else
--- Codex's ProcSide arc in the glow colour. Placement and animation follow the game's frame: a 204.8 square box at
+-- and every spell the game lights with the glow event), Codex's own piece for it, else the spell's icon on Codex's
+-- ProcSide arc, else the arc alone, in the glow colour. (The game's own art files were a look of their own until
+-- 2026-11-23; the user had that option removed.) Placement and animation follow the game's frame: a 204.8 square box at
 -- the screen centre, sides 0.8 x 128x256 against its left and right edge (the right one mirrored), the top one over it,
 -- a 0.2 s fade in, a 1.08 pulse every 0.5 s and a 0.1 s fade out. Several procs share the places by count
--- (A.Show): one = both sides, two = left and right, three = + top, four = + bottom (side art turned a quarter).
+-- (A.Show): one = both sides, two = left and right, three = + top, four = + bottom (side art turned a quarter);
+-- or all on one side (A.Side: left, right, top or bottom).
 -- Whatever the game's own frame shows (SPELL_ACTIVATION_OVERLAY_SHOW) is left to it.
--- The "spell's icon" look (also what the game's look falls back to): the arc, with the proc's own icon three
+-- The "spell's icon" look (also what Codex art falls back to): the arc, with the proc's own icon three
 -- times along it on each side (big in the middle, two smaller up and down the curve, soft round edges from the
 -- ProcIconMask mask; the right side mirrored), so the art says which ability lit. Plain textures on a frame of
 -- ours on UIParent: nothing secure, works in combat.
@@ -26,6 +27,10 @@ local A = {}
 P.art = A
 
 A.KEY, A.LOOK_KEY, A.SIZE_KEY, A.ALPHA_KEY = "procArt", "procArtLook", "procArtSize", "procArtAlpha"
+A.SIDE_KEY = "procArtSide" -- both sides, or only the left / right / top / bottom one (a player's wish, 2026-11-23)
+A.SIDE_EACH_KEY, A.SIDE_FOR_KEY = "procArtSideEach", "procArtSideFor" -- a side per ability (the same player, 2026-11-23)
+A.LOOK_EACH_KEY, A.LOOK_FOR_KEY = "procArtLookEach", "procArtLookFor" -- an art per ability (the user, 2026-11-23)
+A.COLOR_KEY, A.CUSTOM_KEY = "procArtColor", "procArtCustom" -- the tint of styles, arc and icon looks (2026-11-23)
 local BRAND = ns.PROC_BRAND or "Codex" -- (the standalone: "Proc Glow")
 local MEDIA = ns.PROC_MEDIA or ("Interface\\AddOns\\" .. addonName .. "\\Modules\\QoL\\Media\\")
 A.ARC = MEDIA .. "ProcSide"
@@ -38,48 +43,30 @@ A.MAX = 4 -- procs shown at once (2026-11-22, the user's request: one proc on bo
 -- = left, right, top; four = left, right, top, bottom; more wait their turn: the first four lit show)
 A.ROTATE = 2 -- (the old one-at-a-time rotation, 2026-11-20; kept for A.Rotate, no longer used by A.Update)
 
--- The game's art (FileDataID, textures/spellactivationoverlays/*.blp) and where it goes: "sides" (a 128x256 file)
--- or "top" (256x128). Keyed by the lit ability's name or the buff that lit it, lower case.
-local ART = {
-  art_of_war = { 450913, "sides" }, nightfall = { 449492, "sides" }, sudden_death = { 449493, "sides" },
-  arcane_missiles = { 449486, "sides" }, omen = { 510823, "sides" }, killing_machine = { 458740, "sides" },
-  molten_core = { 458741, "sides" }, hot_streak = { 449490, "sides" }, frozen_fingers = { 449489, "sides" },
-  grand_crusader = { 450925, "sides" }, sword_and_board = { 449494, "sides" }, surge_of_light = { 450933, "sides" },
-  sudden_doom = { 450932, "sides" }, raging_blow = { 962497, "sides" }, brain_freeze = { 449488, "top" },
-  rime = { 450930, "top" }, backlash = { 460830, "top" }, maelstrom = { 450927, "top" },
-  master_marksman = { 450928, "top" }, lock_and_load = { 450926, "top" }, shooting_stars = { 463452, "top" },
-  predatory = { 898423, "top" },
-}
-A.FILES = ART
-P.ART = {
-  ["blade of justice"] = "art_of_war", ["art of war"] = "art_of_war", ["the art of war"] = "art_of_war",
-  ["exorcism"] = "art_of_war",
-  ["shadow trance"] = "nightfall", ["nightfall"] = "nightfall", ["shadow bolt"] = "nightfall",
-  ["execute"] = "sudden_death", ["sudden death"] = "sudden_death",
-  ["arcane missiles"] = "arcane_missiles", ["missile barrage"] = "arcane_missiles",
-  ["obliterate"] = "killing_machine", ["frost strike"] = "killing_machine", ["killing machine"] = "killing_machine",
-  ["molten core"] = "molten_core", ["incinerate"] = "molten_core", ["soul fire"] = "molten_core",
-  ["pyroblast"] = "hot_streak", ["hot streak"] = "hot_streak",
-  ["ice lance"] = "frozen_fingers", ["fingers of frost"] = "frozen_fingers",
-  ["avenger's shield"] = "grand_crusader", ["grand crusader"] = "grand_crusader",
-  ["shield slam"] = "sword_and_board", ["sword and board"] = "sword_and_board",
-  ["flash heal"] = "surge_of_light", ["surge of light"] = "surge_of_light",
-  ["death coil"] = "sudden_doom", ["sudden doom"] = "sudden_doom",
-  ["raging blow"] = "raging_blow",
-  ["frostfire bolt"] = "brain_freeze", ["brain freeze"] = "brain_freeze", ["flurry"] = "brain_freeze",
-  ["howling blast"] = "rime", ["rime"] = "rime",
-  ["backlash"] = "backlash",
-  ["maelstrom weapon"] = "maelstrom",
-  ["aimed shot"] = "master_marksman", ["master marksman"] = "master_marksman",
-  ["explosive shot"] = "lock_and_load", ["lock and load"] = "lock_and_load",
-  ["starsurge"] = "shooting_stars", ["shooting stars"] = "shooting_stars",
-  ["predatory swiftness"] = "predatory",
-}
 -- Clearcasting looks different per class.
 A.CLEARCASTING = { MAGE = "arcane_missiles", DRUID = "omen" }
 
-A.LOOKS = { { "codex", (ns.PROC_ART_NAME or "Codex art") }, { "game", "The game's art" }, { "icon", "The spell's icon" },
-  { "arc", "An arc in the glow colour" } }
+-- Styles (2026-11-23, the user's "generate more arts and let the user select between those arts"): one piece for any
+-- proc, white, tinted in the glow colour (branding/source/proc-art-styles.py writes Media/ProcArt/style_<key>.tga).
+-- { key, name, sample colour (the gallery's, while each proc keeps its own colour) }. The second eight (the user's
+-- "more related to the game", the same day): weapons, claws and the schools of magic.
+A.STYLES = { { "flames", "Flames", { 1, 0.45, 0.12 } }, { "runes", "Runes", { 0.45, 0.7, 1 } },
+  { "feathers", "Feathers", { 1, 0.85, 0.45 } }, { "moons", "Crescent moons", { 0.7, 0.75, 1 } },
+  { "lightning", "Lightning", { 0.3, 0.75, 1 } }, { "vines", "Vines", { 0.35, 0.85, 0.35 } },
+  { "crystals", "Crystal shards", { 0.75, 0.45, 1 } }, { "stars", "Stars", { 0.85, 0.85, 1 } },
+  { "swords", "Swords", { 1, 0.4, 0.2 } }, { "daggers", "Daggers", { 0.95, 0.9, 0.4 } },
+  { "arrows", "Arrows", { 0.55, 0.85, 0.35 } }, { "claws", "Claw marks", { 0.95, 0.25, 0.2 } },
+  { "skulls", "Skulls", { 0.6, 0.3, 0.95 } }, { "snowflakes", "Snowflakes", { 0.5, 0.8, 1 } },
+  { "light", "Rays of light", { 1, 0.85, 0.35 } }, { "sigils", "Arcane sigils", { 0.8, 0.45, 1 } } }
+A.styleKeys = {}
+for _, style in ipairs(A.STYLES) do
+  A.styleKeys["style:" .. style[1]] = style
+end
+A.LOOKS = { { "codex", (ns.PROC_ART_NAME or "Codex art") }, { "icon", "The spell's icon" },
+  { "arc", "A plain arc" }, { title = "Styles" } }
+for _, style in ipairs(A.STYLES) do
+  A.LOOKS[#A.LOOKS + 1] = { "style:" .. style[1], style[2] }
+end
 
 -- Codex art (the default look since 2026-11-20, the user's request): an original piece per proc Codex knows, the
 -- arc in the proc's colours with its emblem (branding/source/proc-codex-art.py writes Media/ProcArt/<key>.tga, the
@@ -105,6 +92,9 @@ end
 
 A.SIZES = { { 0.8, "Small" }, { 1, "Normal" }, { 1.25, "Large" } }
 A.ALPHAS = { { 0.4, "40 %" }, { 0.6, "60 %" }, { 0.8, "80 %" }, { 1, "100 %" } }
+A.SIDES = { { "both", "Both sides" }, { "left", "Left side only" }, { "right", "Right side only" },
+  { "top", "Top only" }, { "bottom", "Bottom only" } }
+A.COLOR_CHOICES = { { "proc", "Each proc's own colour" }, { "glow", "The glow colour" }, { "custom", "Your colour" } }
 -- the option lists in ProcGlow.lua were made before this file ran: fill them in place
 for name, list in pairs(P.artLists or {}) do
   for index, entry in ipairs(A[name] or {}) do
@@ -174,6 +164,150 @@ function A.Alpha()
   return value and math.max(0.1, math.min(1, value)) or 0.8
 end
 
+-- "both", "left", "right", "top" or "bottom".
+function A.Side()
+  local value = Q.DB()[A.SIDE_KEY]
+  return A.ONE_SIDE[value] and value or "both"
+end
+
+-- The colours: tinted looks (styles, the arc, the icon's arc) take each proc's own colour by default (2026-11-23, the
+-- user's "make them with their colours to give them a meaning"): the glow colour of its Codex art piece (the same
+-- palette as branding/source/proc-codex-art.py), else a related proc's, else its class colour. "glow" = the proc glow
+-- colour, "custom" = one picked in the game's colour picker (A.PickColor). Codex art pieces keep their own colours.
+A.COLORS = {
+  overpower = { 1.00, 0.36, 0.14 }, revenge = { 0.94, 0.43, 0.16 }, execute = { 0.82, 0.08, 0.12 },
+  victory_rush = { 0.90, 0.71, 0.16 }, riposte = { 0.47, 0.67, 1.00 }, counterattack = { 0.90, 0.59, 0.16 },
+  mongoose_bite = { 0.47, 0.82, 0.24 }, hammer_of_wrath = { 1.00, 0.77, 0.24 },
+  echo_of_command = { 1.00, 0.59, 0.12 }, echo_of_righteousness = { 1.00, 0.81, 0.35 },
+  echo_of_justice = { 0.35, 0.59, 1.00 }, echo_of_fury = { 0.94, 0.24, 0.12 }, echo_of_light = { 1.00, 0.89, 0.31 },
+  echo_of_wisdom = { 0.27, 0.67, 0.94 }, shadow_trance = { 0.51, 0.16, 0.86 },
+  clearcasting_mage = { 0.35, 0.47, 1.00 }, clearcasting_druid = { 0.24, 0.75, 0.35 },
+  clearcasting_shaman = { 0.16, 0.71, 0.94 }, missile_barrage = { 0.78, 0.31, 1.00 }, heating_up = { 1.00, 0.38, 0.08 },
+}
+-- procs without a piece of ours that share one's meaning (lower case)
+A.COLOR_LIKE = { ["blade of justice"] = "hammer_of_wrath", ["art of war"] = "hammer_of_wrath",
+  ["exorcism"] = "hammer_of_wrath", ["pyroblast"] = "heating_up", ["hot streak"] = "heating_up",
+  ["nightfall"] = "shadow_trance", ["shadow bolt"] = "shadow_trance", ["arcane missiles"] = "missile_barrage",
+  ["unsealed wrath"] = "echo_of_command" }
+
+function A.ColorMode()
+  local value = Q.DB()[A.COLOR_KEY]
+  return (value == "glow" or value == "custom") and value or "proc"
+end
+
+function A.CustomColor()
+  local c = Q.DB()[A.CUSTOM_KEY]
+  if type(c) == "table" and Num(c[1]) and Num(c[2]) and Num(c[3]) then
+    return { c[1], c[2], c[3] }
+  end
+  return { 1, 0.82, 0.3 }
+end
+
+local function ClassColor()
+  local class = Class()
+  local get = C_ClassColor and C_ClassColor.GetClassColor
+  if class and type(get) == "function" then
+    local ok, color = pcall(get, class)
+    if ok and type(color) == "table" and Num(color.r) then
+      return { color.r, color.g, color.b }
+    end
+  end
+  return nil
+end
+
+-- A proc's own colour (its name), or nil when it has none.
+function A.ProcColor(name)
+  local key = A.CodexKey(name) or A.COLOR_LIKE[Lower(name) or ""]
+  return key and A.COLORS[key] or nil
+end
+
+-- The tint for a proc's styled / arc art.
+function A.TintFor(name)
+  local mode = A.ColorMode()
+  if mode == "custom" then
+    return A.CustomColor()
+  end
+  if mode == "proc" then
+    local own = A.ProcColor(name) or ClassColor()
+    if own then
+      return own
+    end
+  end
+  return P.Color()
+end
+
+-- The game's colour picker for "Your colour": every change shows at once, Cancel puts the old colour back.
+function A.PickColor()
+  local picker = ColorPickerFrame
+  if type(picker) ~= "table" or type(picker.SetupColorPickerAndShow) ~= "function" then
+    return false
+  end
+  local db = Q.DB()
+  local before = A.CustomColor()
+  local beforeMode = db[A.COLOR_KEY]
+  local function Changed()
+    if Q.RefreshPage then
+      Q.RefreshPage()
+    end
+    A.Refresh()
+  end
+  picker:SetupColorPickerAndShow({
+    r = before[1], g = before[2], b = before[3], hasOpacity = false,
+    swatchFunc = function()
+      local r, g, b = picker:GetColorRGB()
+      if Num(r) and Num(g) and Num(b) then
+        db[A.CUSTOM_KEY] = { r, g, b }
+        db[A.COLOR_KEY] = "custom"
+        Changed()
+      end
+    end,
+    cancelFunc = function()
+      db[A.CUSTOM_KEY] = before
+      db[A.COLOR_KEY] = beforeMode
+      Changed()
+    end,
+  })
+  return true
+end
+
+-- An ability's own art (a look, as A.Look), or nil: it follows A.Look(). Only while "Choose the art per ability" is
+-- on.
+function A.LookFor(name)
+  local db = Q.DB()
+  local own = db[A.LOOK_EACH_KEY] and type(name) == "string" and type(db[A.LOOK_FOR_KEY]) == "table"
+    and db[A.LOOK_FOR_KEY][name]
+  if own == "codex" or own == "icon" or own == "arc" or A.styleKeys[own] then
+    return own
+  end
+  return nil
+end
+
+-- An ability's own side ("both", "left", "right", "top", "bottom"), or nil: it follows A.Side(). Only while
+-- "Choose the side per ability" is on.
+function A.SideFor(name)
+  local db = Q.DB()
+  local own = db[A.SIDE_EACH_KEY] and type(name) == "string" and type(db[A.SIDE_FOR_KEY]) == "table"
+    and db[A.SIDE_FOR_KEY][name]
+  if own == "both" or A.ONE_SIDE[own] then
+    return own
+  end
+  return nil
+end
+
+-- "codex", "icon", "arc" or "style:<key>". A saved "game" (the game's art, a look until 2026-11-23) becomes Codex
+-- art.
+function A.Look()
+  local db = Q.DB()
+  local value = db[A.LOOK_KEY]
+  if value == "icon" or value == "arc" or A.styleKeys[value] then
+    return value
+  end
+  if value ~= "codex" then
+    db[A.LOOK_KEY] = "codex"
+  end
+  return "codex"
+end
+
 -- A spell's icon (file ID or path), or nil; secret = none.
 local function Texture(spell)
   local get = C_Spell and C_Spell.GetSpellTexture
@@ -225,12 +359,16 @@ function A.IconFor(name, id)
   return Texture(name)
 end
 
--- The art for a proc (its name, and its spell ID when known): { file, where, tint, icon, key }. "game": the game's
--- file, else the spell's icon on the arc, else the arc; "icon": the icon on the arc (else the arc); "arc": the arc.
--- The arc is tinted in the glow colour.
+-- The art for a proc (its name, and its spell ID when known): { file, where, tint, icon, key }. A style: its piece,
+-- tinted; "codex": Codex's piece,
+-- else the spell's icon on the arc; "icon": the icon on the arc (else the arc); "arc": the arc. The arc is tinted in the
+-- glow colour. Every file is a side file (128x256, outer edge left).
 function A.ArtFor(name, id)
-  local key = Lower(name)
-  local look = Q.DB()[A.LOOK_KEY]
+  local look = A.LookFor(name) or A.Look()
+  local style = A.styleKeys[look]
+  if style then
+    return { file = A.CODEX_DIR .. "style_" .. style[1], where = "sides", tint = true, key = look, color = A.TintFor(name) }
+  end
   if look == "codex" then
     local codex = A.CodexKey(name)
     if codex then
@@ -238,23 +376,13 @@ function A.ArtFor(name, id)
     end
     look = "icon" -- no piece of ours for it: the spell's icon on the arc
   end
-  if look ~= "arc" and look ~= "icon" and key then
-    local pick = P.ART[key]
-    if key == "clearcasting" then
-      pick = A.CLEARCASTING[Class() or ""]
-    end
-    local art = pick and ART[pick]
-    if art then
-      return { file = art[1], where = art[2], key = pick }
-    end
-  end
   if look ~= "arc" then
     local icon = A.IconFor(name, id)
     if icon then
-      return { file = A.ARC, where = "sides", tint = true, icon = icon, key = "icon" }
+      return { file = A.ARC, where = "sides", tint = true, icon = icon, key = "icon", color = A.TintFor(name) }
     end
   end
-  return { file = A.ARC, where = "sides", tint = true, key = "arc" }
+  return { file = A.ARC, where = "sides", tint = true, key = "arc", color = A.TintFor(name) }
 end
 
 -- Frames ----------------------------------------------------------------------------------------------------------
@@ -322,7 +450,7 @@ local function Animate(piece)
   end)
 end
 
--- One piece per place: left, right, left2, right2, top, bottom.
+-- One piece per place: left, right, left2, right2, top, bottom, top2, bottom2.
 local function Piece(place)
   local anchor = Anchor()
   local piece = A.pieces[place]
@@ -363,6 +491,8 @@ local PLACES = {
   right2 = { "short", "long", "LEFT", "RIGHT", 1, flipX = true },
   top = { "long", "short", "BOTTOM", "TOP", 0 },
   bottom = { "long", "short", "TOP", "BOTTOM", 0, flipY = true },
+  top2 = { "long", "short", "BOTTOM", "TOP", 0, y = 1 },
+  bottom2 = { "long", "short", "TOP", "BOTTOM", 0, y = -1, flipY = true },
 }
 A.PLACES = PLACES
 
@@ -372,7 +502,7 @@ A.PLACES = PLACES
 local function Corners(place, where)
   local spot = PLACES[place]
   local turns = 0 -- quarter turns clockwise
-  local outerTop = place == "top" or place == "bottom"
+  local outerTop = spot[1] == "long" -- top, bottom and the ones further out
   if where == "top" and not outerTop then
     turns = 3
   elseif where ~= "top" and outerTop then
@@ -404,11 +534,11 @@ local function Place(piece, art)
   local height = (spot[2] == "long" and A.LONG or A.SHORT) * size
   A.anchor:SetSize(A.LONG * size, A.LONG * size)
   piece:ClearAllPoints()
-  piece:SetPoint(spot[3], A.anchor, spot[4], spot[5] * A.SHORT * size, 0)
+  piece:SetPoint(spot[3], A.anchor, spot[4], spot[5] * A.SHORT * size, (spot.y or 0) * A.SHORT * size)
   piece:SetSize(width, height)
   local ok = pcall(piece.texture.SetTexture, piece.texture, art.file)
   piece.texture:SetTexCoord(unpack(Corners(piece.place, art.where)))
-  local color = art.tint and P.Color() or { 1, 1, 1 }
+  local color = art.tint and (art.color or P.Color()) or { 1, 1, 1 }
   piece.texture:SetVertexColor(color[1], color[2], color[3])
   if art.tint and piece.texture.SetBlendMode then
     piece.texture:SetBlendMode("ADD")
@@ -568,9 +698,67 @@ end
 
 -- Showing ---------------------------------------------------------------------------------------------------------
 
--- Where each of several procs goes, by how many there are (2026-11-22): one on both sides (or on top, for a top file
--- of the game's), two left and right, three adds the top, four the bottom.
+-- Where each of several procs goes, by how many there are (2026-11-22): one on both sides, two left and right, three
+-- adds the top, four the bottom. With one side chosen (A.Side): the first on that side (turned to face it), the second
+-- further out on the same side, then the two sides next to it.
 A.SLOTS = { { "left", "right", "top", "bottom" } }
+A.ONE_SIDE = {
+  left = { "left", "left2", "top", "bottom" },
+  right = { "right", "right2", "top", "bottom" },
+  top = { "top", "top2", "left", "right" },
+  bottom = { "bottom", "bottom2", "left", "right" },
+}
+
+-- Puts each proc ({ art, name }, in order) on its places in `wanted` ([place] = proc). An ability with a side of its own
+-- (A.SideFor) goes there first: that side, then further out on it ("both": left and right, while both are free);
+-- when those are taken it joins the others. The others follow Art side as before: one side = its places in order
+-- (A.ONE_SIDE), both = one alone on both sides, several left, right, top, bottom; taken places are skipped, and the
+-- places further out are the last resort.
+A.OWN = { left = { "left", "left2" }, right = { "right", "right2" }, top = { "top", "top2" },
+  bottom = { "bottom", "bottom2" } }
+A.SPARE = { "left2", "right2", "top2", "bottom2" }
+function A.Place(list, wanted)
+  local rest = {}
+  for _, one in ipairs(list) do
+    local own, placed = A.SideFor(one.name), false
+    if own == "both" then
+      if not wanted.left and not wanted.right then
+        wanted.left, wanted.right, placed = one, one, true
+      end
+    elseif own then
+      for _, place in ipairs(A.OWN[own]) do
+        if not placed and not wanted[place] then
+          wanted[place], placed = one, true
+        end
+      end
+    end
+    if not placed then
+      rest[#rest + 1] = one
+    end
+  end
+  local order = A.ONE_SIDE[A.Side()]
+  if not order then
+    if #rest == 1 and not next(wanted) then
+      wanted.left, wanted.right = rest[1], rest[1]
+      return wanted
+    end
+    order = A.SLOTS[1]
+  end
+  local function Next(places)
+    for _, place in ipairs(places) do
+      if not wanted[place] then
+        return place
+      end
+    end
+  end
+  for _, one in ipairs(rest) do
+    local place = Next(order) or Next(A.SPARE)
+    if place then
+      wanted[place] = one
+    end
+  end
+  return wanted
+end
 
 -- Shows the art for these procs (names or { name, id }, in order; at most A.MAX) and fades out the rest.
 function A.Show(names)
@@ -586,18 +774,7 @@ function A.Show(names)
     end
     list[#list + 1] = { art = A.ArtFor(name, id), name = name }
   end
-  if #list == 1 then
-    local one = list[1]
-    if one.art.where == "top" then
-      wanted.top = one
-    else
-      wanted.left, wanted.right = one, one
-    end
-  else
-    for index, one in ipairs(list) do
-      wanted[A.SLOTS[1][index]] = one
-    end
-  end
+  A.Place(list, wanted)
   if next(wanted) then
     Anchor()
     A.anchor:SetAlpha(A.Alpha())
@@ -712,7 +889,7 @@ local TEST_CODEX = { PALADIN = "Echo of Command", WARLOCK = "Shadow Trance", WAR
 A.TEST_CODEX = TEST_CODEX
 function A.Test()
   A.testing = true
-  local codex = Q.DB()[A.LOOK_KEY] == "codex" and TEST_CODEX[Class() or ""]
+  local codex = A.Look() == "codex" and TEST_CODEX[Class() or ""]
   A.testNames = { codex or TEST[Class() or ""] or "Blade of Justice" }
   A.Show(A.testNames)
   local token = {}
@@ -734,7 +911,7 @@ function A.Test()
 end
 
 -- The gallery: every Codex art piece, both sides, with its proc and class (the option's "Show all arts").
-local GALLERY_COLS, CELL_W, CELL_H = 5, 150, 190
+local GALLERY_COLS, CELL_W, CELL_H = 9, 130, 176
 
 function A.Gallery()
   local UI = ns.UI
@@ -748,7 +925,14 @@ function A.Gallery()
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-    local rows = math.ceil(#A.CODEX / GALLERY_COLS)
+    local entries = {}
+    for _, entry in ipairs(A.CODEX) do
+      entries[#entries + 1] = entry
+    end
+    for _, style in ipairs(A.STYLES) do -- the styles after the pieces, in the glow colour
+      entries[#entries + 1] = { "style_" .. style[1], style[2], "Style, any proc", tint = style[3] }
+    end
+    local rows = math.ceil(#entries / GALLERY_COLS)
     frame:SetSize(GALLERY_COLS * CELL_W + 32, rows * CELL_H + 70)
     frame:SetPoint("CENTER")
     UI.Panel(frame, { cornerSize = 14 })
@@ -757,12 +941,12 @@ function A.Gallery()
     title:SetText(ns.PROC_ART_NAME or "Codex art")
     local note = UI.Text(frame, "body", 11, "muted")
     note:SetPoint("LEFT", title, "RIGHT", 12, -1)
-    note:SetText("The art beside your character for each proc " .. BRAND .. " knows. Other procs show their icon on the arc.")
+    note:SetText("The art beside your character for each proc " .. BRAND .. " knows, then the styles any proc can use.")
     local close = UI.CloseButton(frame)
     close:SetPoint("TOPRIGHT", -10, -10)
     table.insert(UISpecialFrames, (ns.PROC_FRAMES or "Codex") .. "ProcArtGallery")
     frame.cells = {}
-    for index, entry in ipairs(A.CODEX) do
+    for index, entry in ipairs(entries) do
       local col, row = (index - 1) % GALLERY_COLS, math.floor((index - 1) / GALLERY_COLS)
       local cell = CreateFrame("Frame", nil, frame)
       cell:SetSize(CELL_W - 10, CELL_H - 10)
@@ -771,16 +955,26 @@ function A.Gallery()
       back:SetAllPoints()
       back:SetColorTexture(0, 0, 0, 0.35)
       local left = cell:CreateTexture(nil, "ARTWORK")
-      left:SetSize(64, 128)
+      left:SetSize(56, 112)
       left:SetPoint("TOPRIGHT", cell, "TOP", 0, -8)
       left:SetTexture(A.CODEX_DIR .. entry[1])
       local right = cell:CreateTexture(nil, "ARTWORK")
-      right:SetSize(64, 128)
+      right:SetSize(56, 112)
       right:SetPoint("TOPLEFT", cell, "TOP", 0, -8)
       right:SetTexture(A.CODEX_DIR .. entry[1])
       right:SetTexCoord(1, 0, 0, 1)
+      if entry.tint then
+        local mode = A.ColorMode()
+        local color = mode == "custom" and A.CustomColor() or mode == "glow" and P.Color() or entry.tint
+        for _, side in ipairs({ left, right }) do
+          side:SetVertexColor(color[1], color[2], color[3])
+          if side.SetBlendMode then
+            side:SetBlendMode("ADD")
+          end
+        end
+      end
       local name = UI.Text(cell, "body", 12, "bright")
-      name:SetPoint("TOP", left, "BOTTOM", 64 / 2 + 0, -6)
+      name:SetPoint("TOP", left, "BOTTOM", 56 / 2 + 0, -6)
       name:SetPoint("LEFT", cell, "LEFT", 4, 0)
       name:SetPoint("RIGHT", cell, "RIGHT", -4, 0)
       name:SetJustifyH("CENTER")
