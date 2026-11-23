@@ -23,7 +23,7 @@ If you use Codex, its own proc glow does the same; while this addon is loaded, C
 - `/procglow on` / `/procglow off` switches it.
 - `/procglow report` prints what each glow is doing (handy in a bug report).
 
-In combat the game hides most of your buffs from addons. Buff procs then light only while that buff is tracked in the game's cooldown manager, which Proc Glow can still read.
+In combat the game hides most of your buffs from addons. Buff procs then light only while that buff is tracked in the game's cooldown manager, which Proc Glow can still read. Heating Up is the exception: its stacks show in Pyroblast's cast time, which stays readable.
 
 ## Feedback
 

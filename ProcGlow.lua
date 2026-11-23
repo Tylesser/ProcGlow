@@ -65,9 +65,11 @@ P.AURAS = {
   -- Heating Up (the user's request, 2026-11-22): Forever's buff 400625 (wago.tools wowf build 1.60.1.71037: stacks
   -- up to 3, each cutting the next Pyroblast's cast time) lights Pyroblast at 3 stacks. notIDs: 400624 is the
   -- talent's passive of that name, 460878 a boss aura (Molten Core). A count hidden in combat comes from the
-  -- cooldown manager when the buff is tracked there (secretStacks), as for the paladin echoes.
+  -- cooldown manager when the buff is tracked there (secretStacks), as for the paladin echoes, and better from
+  -- Pyroblast's cast time (castTime: P.CastStacks; a critical strike gives two stacks at once).
   { name = "Heating Up", ids = { 400625 }, notIDs = { [400624] = true, [460878] = true }, class = "MAGE",
     stacks = 3, secretStacks = true, spells = { "Pyroblast" },
+    castTime = { spell = 11366, ref = 133, step = 0.25 }, -- Pyroblast and Fireball (rank 1), -25 % a stack
     spellIDs = { 11366, 12505, 12522, 12523, 12524, 12525, 12526, 18809 } },
   { name = "Missile Barrage", ids = { 1326083, 400589, 467409 }, notIDs = { [400588] = true, [401736] = true },
     class = "MAGE", spells = { "Arcane Missiles" },
@@ -1192,12 +1194,16 @@ function P.ActiveAuras()
     return active
   end
   P.Lookup()
+  local hidden, known = false, {}
   for index = 1, 40 do
     local ok, aura = pcall(read, "player", index, "HELPFUL")
     if not ok or type(aura) ~= "table" then
       break
     end
     local id, name = Num(aura.spellId), Str(aura.name)
+    if not name then
+      hidden = true
+    end
     if name then
       active.names[Lower(name)] = true
       P.NoteSeal(name)
@@ -1214,6 +1220,8 @@ function P.ActiveAuras()
         end
       else
         P.SeenStacks(match, Num(count) or 0)
+        known[match] = true
+        P.LearnCast(match, Num(count) or 0)
         if (Num(count) or 0) < match.stacks then
           match = nil
         end
@@ -1223,7 +1231,20 @@ function P.ActiveAuras()
       active[match] = true
     end
   end
-  P.ViewerAuras(active)
+  P.ViewerAuras(active, known)
+  for _, entry in ipairs(P.AURAS) do
+    if entry.castTime and P.auraIDs[entry.ids[1]] == entry and not known[entry] then
+      if not hidden then
+        P.LearnCast(entry, 0) -- every buff readable and this one not among them
+      else
+        local count = P.CastStacks(entry)
+        if count then
+          P.SeenStacks(entry, count)
+          active[entry] = count >= entry.stacks or nil
+        end
+      end
+    end
+  end
   return active
 end
 
@@ -1349,10 +1370,10 @@ local function OnItemAuraUpdated(item)
   end
   local guess = Guess(match)
   local now = GetTime()
-  if guess.at == now then
+  if guess.at == now and guess.item ~= item then
     return -- the same change seen by a second item (an icon and a bar of the same buff)
   end
-  guess.at = now
+  guess.at, guess.item = now, item
   guess.count = math.min(match.stacks, math.max(guess.count, 1) + 1)
   P.UpdateSoon()
 end
@@ -1383,7 +1404,79 @@ function P.HookStacks(item, match)
   end
 end
 
-function P.ViewerAuras(active)
+-- Stacks from a cast time (2026-11-23, the user: "heating up gets 2 stack when hit with critical strike so our
+-- counting system fails"): one hit can add two stacks in one change, and hidden counts can't be read. But each
+-- stack of Heating Up takes 25 % off Pyroblast's cast time (400625's SpellEffect, wago.tools wowf: aura 108, a
+-- percent modifier, misc 10 = cast time, -25, Pyroblast's class mask), and C_Spell.GetSpellInfo's castTime has
+-- no secret flag (forever SpellDocumentation), so it reads in a fight. Pyroblast's time over Fireball's (haste
+-- and fire-wide changes cancel out) against the same ratio without the buff gives the count. That ratio is
+-- learned whenever the count is known to be 0: a fully readable buff list without the buff, or the cooldown
+-- manager's item off. A readable count above 0 only checks the reader (never learned from: if castTime didn't
+-- carry the modifier, a ratio learned at 3 stacks would read 3 with no buff). A reading of 0 is trusted only after
+-- a drop was seen once; a readable count the cast time disagrees with (0) switches the reader off for the session.
+P.castBase = {} -- [aura entry] = Pyroblast / Fireball without the buff
+P.castSeen, P.castWorks = false, nil
+
+function P.CastRatio(match)
+  local spec = match and match.castTime
+  if not spec then
+    return nil
+  end
+  local function Time(id)
+    local info = C_Spell and C_Spell.GetSpellInfo and Ask(C_Spell.GetSpellInfo, id)
+    return type(info) == "table" and Num(info.castTime) or nil
+  end
+  local own, ref = Time(spec.spell), Time(spec.ref)
+  if own and ref and own > 0 and ref > 0 then
+    return own / ref
+  end
+  return nil -- unknown, or an instant cast (Presence of Mind): no reading
+end
+
+local function CastCount(match)
+  local base, ratio = P.castBase[match], P.CastRatio(match)
+  if not base or not ratio then
+    return nil
+  end
+  local count = math.floor((1 - ratio / base) / match.castTime.step + 0.5)
+  return math.max(0, math.min(match.stacks or 3, count))
+end
+
+-- The count Pyroblast's cast time says now, or nil when it can't say.
+function P.CastStacks(match)
+  if P.castWorks == false then
+    return nil
+  end
+  local count = CastCount(match)
+  if count and count > 0 then
+    P.castSeen = true
+  elseif count == 0 and not P.castSeen then
+    return nil
+  end
+  return count
+end
+
+-- A count known for sure: learn the ratio (0) or check the reader against it.
+function P.LearnCast(match, count)
+  if not (match and match.castTime) then
+    return
+  end
+  if count == 0 then
+    local ratio = P.CastRatio(match)
+    if ratio then
+      P.castBase[match] = ratio
+    end
+    return
+  end
+  local said = CastCount(match)
+  if said and said > 0 then
+    P.castWorks, P.castSeen = true, true
+  elseif said == 0 then
+    P.castWorks = false
+  end
+end
+
+function P.ViewerAuras(active, known)
   for _, name in ipairs(P.BUFF_VIEWERS) do
     local viewer = _G[name]
     local pool = type(viewer) == "table" and rawget(viewer, "itemFramePool")
@@ -1400,6 +1493,10 @@ function P.ViewerAuras(active)
             local count = type(cached) == "table" and cached.applications or nil
             if match.stacks and Readable(count) then
               P.SeenStacks(match, Num(count) or 0)
+              P.LearnCast(match, Num(count) or 0)
+              if known then
+                known[match] = true
+              end
               if (Num(count) or 0) >= match.stacks then
                 active[match] = true
               end
@@ -1416,6 +1513,7 @@ function P.ViewerAuras(active)
             end
           elseif match and on == false and match.secretStacks then
             Guess(match).count = 0
+            P.LearnCast(match, 0)
           end
         end
       end)
@@ -1826,6 +1924,15 @@ function P.Report()
   end
   local db = Q.DB()
   Say(("your seal (for the echoes): %s"):format(P.lastSeal or "not known yet"))
+  for _, entry in ipairs(P.AURAS) do
+    if entry.castTime and P.auraIDs and P.auraIDs[entry.ids[1]] == entry then
+      local ratio, base = P.CastRatio(entry), P.castBase[entry]
+      Say(("%s from the cast time: %s (ratio %s, without the buff %s, %s)"):format(entry.name,
+        tostring(P.CastStacks(entry) or "-"), ratio and ("%.3f"):format(ratio) or "-",
+        base and ("%.3f"):format(base) or "not learned yet",
+        P.castWorks == false and "off: the cast time doesn't change" or P.castSeen and "seen working" or "not seen yet"))
+    end
+  end
   for match, guess in pairs(P.stackGuess) do
     Say(("%s: %d of %d stacks (%s)"):format(match.name, guess.count, match.stacks or 0,
       guess.hooked and "counted from the cooldown manager" or "not counted: active = reached"))
