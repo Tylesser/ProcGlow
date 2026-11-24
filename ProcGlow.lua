@@ -1713,22 +1713,48 @@ function P.CastStacks(match)
 end
 
 -- A count known for sure: learn the ratio (0) or check the reader against it.
+-- The cast time can lag the buff by a moment in game (the user's report, 2026-11-24: Heating Up showed only after
+-- the fight with the build-up off): right after the buff drops, Pyroblast may still read the shorter time, and right
+-- after a stack, the longer one. So the ratio without the buff is the longest one seen at 0 (the buff only ever
+-- shortens the cast: a stale reading can't win), and the reader is switched off only when two readings at least
+-- half a second apart disagree with a known count, never on one.
+P.CAST_DOUBT = 0.5
 function P.LearnCast(match, count)
   if not (match and match.castTime) then
     return
   end
   if count == 0 then
     local ratio = P.CastRatio(match)
-    if ratio then
+    if ratio and (not P.castBase[match] or ratio > P.castBase[match]) then
       P.castBase[match] = ratio
     end
     return
   end
   local said = CastCount(match)
   if said and said > 0 then
-    P.castWorks, P.castSeen = true, true
+    P.castWorks, P.castSeen, P.castDoubt = true, true, nil
   elseif said == 0 then
-    P.castWorks = false
+    local now = GetTime()
+    if P.castDoubt and now - P.castDoubt >= P.CAST_DOUBT then
+      P.castWorks = false
+    elseif not P.castDoubt then
+      P.castDoubt = now
+      if C_Timer and C_Timer.After then
+        C_Timer.After(P.CAST_DOUBT + 0.05, function() -- read again once the cast time had time to follow
+          if P.started then
+            P.Update()
+          end
+        end)
+      end
+    end
+  end
+end
+
+-- Talents or spells changed (Improved Fireball, a new rank): the ratio without the buff is learned again.
+function P.ForgetCast()
+  P.castBase, P.castDoubt = {}, nil
+  if P.castWorks == false then
+    P.castWorks = nil
   end
 end
 
@@ -2263,6 +2289,12 @@ local function OnEvent(_, event, unit, ...)
   elseif event == "SPELLS_CHANGED" then
     P.lookup = nil
     P.QueueScan()
+  elseif event == "PLAYER_TALENT_UPDATE" or event == "TRAIT_CONFIG_UPDATED" or event == "ACTIVE_TALENT_GROUP_CHANGED" then
+    -- talents may change Pyroblast's or Fireball's own cast time: the ratio without the buff is learned again, now
+    if not (P.InCombat and P.InCombat()) then
+      P.ForgetCast()
+      P.Update()
+    end
   elseif event == "ADDON_LOADED" then
     if unit == "Blizzard_CooldownViewer" and Q.DB()[CDM_KEY] then
       P.QueueScan()
@@ -2383,6 +2415,9 @@ function P.Start()
     pcall(events.RegisterEvent, events, event)
   end
   pcall(events.RegisterUnitEvent, events, "UNIT_AURA", "player")
+  for _, event in ipairs({ "PLAYER_TALENT_UPDATE", "TRAIT_CONFIG_UPDATED", "ACTIVE_TALENT_GROUP_CHANGED" }) do
+    pcall(events.RegisterEvent, events, event) -- (Heating Up's cast-time reader: P.ForgetCast)
+  end
   pcall(events.RegisterUnitEvent, events, "UNIT_HEALTH", "target")
   pcall(events.RegisterUnitEvent, events, "UNIT_SPELLCAST_SUCCEEDED", "player") -- seals (only paladins have any)
   pcall(events.RegisterEvent, events, "ADDON_LOADED")

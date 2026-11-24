@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.2
+
+- Heating Up now shows in a fight at 3 stacks with "Show stacking procs as they build up" off too. Its stacks are read from Pyroblast's cast time, which can change a moment after the buff; one early reading could switch that reading off until the fight ended.
+
 ## 1.2.1
 
 - Your own procs: the Buff and Spell labels no longer run into each other, and the boxes no longer touch the Pick buttons.
