@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+
+- Your own procs: the Buff and Spell labels no longer run into each other, and the boxes no longer touch the Pick buttons.
+
 ## 1.2.0
 
 - Proc art: **Top and bottom** as an Art side (also per ability): one proc's art above and below you, a second on the other edge, then left and right.
