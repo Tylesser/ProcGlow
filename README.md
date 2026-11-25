@@ -15,6 +15,7 @@ A World of Warcraft addon for **WoW Forever** that makes your **action buttons g
 - **Sound** when a proc starts (off until you switch it on): 14 sounds made for procs (or each proc its own: blades for Overpower, fire for Heating Up, ...) and 14 of the game's, soft or loud, only in combat if you like, on the Master channel if you want, and a different sound per ability. The per-ability lists show your class's procs and fold up; the art and side lists have a preview beside them, and each ability can get its own art colour.
 
 - **Your own procs**: a buff of yours lights a spell on your bars. Pick them from a window: your buffs, gear, consumables in your bags and your spells, by category. In a fight the game hides most buffs from addons, so track the buff in the cooldown manager.
+- **Profiles**: keep several sets of settings (a glow and sound for each of your characters, a quiet one for levelling, ...) and switch between them at the top of the options page or with `/procglow profile <name>`, also from a macro. Each character remembers its own profile; a new one starts as a copy of the settings in use.
 - **More**: a faint glow while you can't cast the spell yet, a glow style and colour per ability, stacking procs building up (one arc, two arcs, then the symbol), Move the art (also in Edit Mode), art only in combat, Play in the preview panel and the time between sounds.
 
 If you use Codex, its own proc glow does the same; while this addon is loaded, Codex leaves the job to it.
@@ -24,6 +25,7 @@ If you use Codex, its own proc glow does the same; while this addon is loaded, C
 - Esc > Options > AddOns > **Tylesser - Proc Glow**, or `/procglow`.
 - `/procglow test` shows the art for a few seconds, `/procglow arts` every piece of art.
 - `/procglow on` / `/procglow off` switches it.
+- `/procglow profile` lists your profiles, `/procglow profile <name>` switches to one (not in a fight).
 - `/procglow report` prints what each glow is doing (handy in a bug report).
 
 In combat the game hides most of your buffs from addons. Buff procs then light only while that buff is tracked in the game's cooldown manager, which Proc Glow can still read. Heating Up is the exception: its stacks show in Pyroblast's cast time, which stays readable.

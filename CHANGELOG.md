@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.0
+
+- **Profiles**: save your settings as named profiles and switch between them at the top of the options page or with `/procglow profile <name>` (works in a macro, not in a fight). Each character remembers its own profile; a new profile starts as a copy of the settings in use. Your settings so far are the Default profile.
+
 ## 1.2.2
 
 - Heating Up now shows in a fight at 3 stacks with "Show stacking procs as they build up" off too. Its stacks are read from Pyroblast's cast time, which can change a moment after the buff; one early reading could switch that reading off until the fight ended.

@@ -10,6 +10,7 @@ local Q = ns.qol
 local P = Q.procglow
 
 local LABEL_WIDTH, PICKER_WIDTH, ROW, GAP = 200, 220, 26, 6
+local PROFILE_H, CONFIRM_TIME = 92, 4
 local panel, content, rows, items = nil, nil, {}, {}
 
 local function Value(key)
@@ -156,6 +157,100 @@ local function OptionRow(parent, option, width)
   return row
 end
 
+-- Profiles at the top of the page (Profiles.lua): the one in use (a picker: switching applies at once), Delete
+-- (two clicks), and a new one from the settings in use now. Never greyed by the main switch: a profile may be the
+-- one that has the glow on. The note under them says what happened, else the hint.
+local PROFILE_HINT = "Each character keeps its own profile. A new one starts as a copy of the settings in use."
+local function ProfileBlock(parent, width)
+  local R = Q.profiles
+  local block = CreateFrame("Frame", nil, parent)
+  block:SetSize(width, PROFILE_H)
+  local function Label(text, y)
+    local label = block:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    label:SetPoint("TOPLEFT", block, "TOPLEFT", 4, y - 5)
+    label:SetWidth(LABEL_WIDTH - 8)
+    label:SetJustifyH("LEFT")
+    label:SetText(text)
+    return label
+  end
+  Label("Profile", 0)
+  Label("New profile", -(ROW + GAP))
+  local note = block:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  note:SetPoint("TOPLEFT", block, "TOPLEFT", LABEL_WIDTH + 2, -(2 * (ROW + GAP)) - 2)
+  note:SetWidth(width - LABEL_WIDTH - 10)
+  note:SetJustifyH("LEFT")
+  local said
+  local function Say(text)
+    said = text
+    note:SetText(text or PROFILE_HINT)
+  end
+
+  local picker = ns.UI.Picker(block, PICKER_WIDTH, 22)
+  picker:SetPoint("TOPLEFT", block, "TOPLEFT", LABEL_WIDTH, -2)
+  picker:SetScript("OnClick", function(self)
+    local choices = {}
+    for _, name in ipairs(R.Names()) do
+      choices[#choices + 1] = { name, name }
+    end
+    Q.OpenChoice(self, choices, R.Active(), function(name)
+      local ok, why = R.Switch(name)
+      Say(ok and ("This character uses \"%s\" now."):format(R.Active()) or why)
+    end)
+  end)
+
+  local delete = T.Button(block, 70, 22, "Delete")
+  delete:SetPoint("LEFT", picker, "RIGHT", 8, 0)
+  local pending, pendingAt
+  delete:SetScript("OnClick", function(self)
+    local name = R.Active()
+    if pending ~= name or GetTime() - (pendingAt or 0) > CONFIRM_TIME then
+      pending, pendingAt = name, GetTime()
+      self:SetText("Sure?")
+      Say(("Click again to delete \"%s\". This character goes back to Default."):format(name))
+      C_Timer.After(CONFIRM_TIME, function()
+        if pending == name and GetTime() - pendingAt >= CONFIRM_TIME - 0.05 then
+          pending = nil
+          self:SetText("Delete")
+        end
+      end)
+      return
+    end
+    pending = nil
+    self:SetText("Delete")
+    local ok, why = R.Delete(name)
+    Say(ok and ("Deleted \"%s\". This character uses Default now."):format(name) or why)
+  end)
+
+  local box = ns.UI.EditBox(block, PICKER_WIDTH - 6, 22)
+  box:SetPoint("TOPLEFT", block, "TOPLEFT", LABEL_WIDTH + 6, -(ROW + GAP) - 2)
+  box:SetMaxLetters(R.MAX_NAME)
+  local create = T.Button(block, 70, 22, "Create")
+  create:SetPoint("TOPLEFT", block, "TOPLEFT", LABEL_WIDTH + PICKER_WIDTH + 8, -(ROW + GAP) - 2)
+  local function Create()
+    local name, why = R.Create(box:GetText())
+    if name then
+      box:SetText("")
+      box:ClearFocus()
+      Say(("Made \"%s\" from the settings in use; this character uses it now."):format(name))
+    else
+      Say(why)
+    end
+  end
+  create:SetScript("OnClick", Create)
+  box:SetScript("OnEnterPressed", Create)
+
+  function block.Refresh()
+    picker:SetText(R.Active())
+    delete:SetEnabled(R.Active() ~= R.DEFAULT)
+    if not said then
+      note:SetText(PROFILE_HINT)
+    end
+  end
+  block.picker, block.delete, block.box, block.create, block.note, block.Say = picker, delete, box, create, note, Say
+  block.Refresh()
+  return block
+end
+
 -- Stacks the rows and the per-ability lists (custom options) top down; a list's height changes as it opens.
 local function Layout()
   local y = panel.top or 0
@@ -185,6 +280,9 @@ local function Refresh()
   if panel.main then
     panel.main:SetChecked(MainOn())
   end
+  if panel.profiles then
+    panel.profiles.Refresh()
+  end
   for _, row in ipairs(rows) do
     row.Refresh()
   end
@@ -211,9 +309,14 @@ local function Build()
   content:SetSize(width, 400)
   scroll:SetScrollChild(content)
 
+  if Q.profiles then
+    panel.profiles = ProfileBlock(content, width)
+    panel.profiles:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
+  end
+  local top = panel.profiles and PROFILE_H or 0
   local toggle = Q.toggle
   local main = T.Check(content, toggle.name)
-  main:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
+  main:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -top)
   main:SetScript("OnClick", function(self)
     Q.Set(toggle.key, self:GetChecked() and true or false)
   end)
@@ -223,7 +326,7 @@ local function Build()
   desc:SetWidth(width - 10)
   desc:SetJustifyH("LEFT")
   desc:SetText(toggle.desc or "")
-  local y = 30 + math.max(28, math.ceil((#(toggle.desc or "")) / 95) * 13) + 12
+  local y = top + 30 + math.max(28, math.ceil((#(toggle.desc or "")) / 95) * 13) + 12
 
   panel.top, panel.items = y, items
   for _, option in ipairs(toggle.options or {}) do
@@ -292,11 +395,25 @@ SlashCmdList.TYLESSERPROCGLOW = function(msg)
     end
   elseif command == "report" then
     P.Report()
+  elseif command == "profile" or command:match("^profile%s") then
+    local R = Q.profiles
+    local name = strtrim(msg or ""):match("^%S+%s+(.+)$")
+    if not name then
+      local list = {}
+      for _, one in ipairs(R.Names()) do
+        list[#list + 1] = one == R.Active() and ("[" .. one .. "]") or one
+      end
+      print(ns.PREFIX .. "Profiles: " .. table.concat(list, ", ") .. ". /procglow profile <name> switches.")
+    else
+      local ok, why = R.Switch(name)
+      print(ns.PREFIX .. (ok and ("profile \"" .. R.Active() .. "\".") or why))
+    end
   elseif command == "on" or command == "off" then
     Q.Set(Q.toggle.key, command == "on")
     print(ns.PREFIX .. (command == "on" and "on." or "off."))
   else
     print(ns.PREFIX .. "/procglow opens the options. /procglow test shows the art, /procglow arts every art, "
-      .. "/procglow report what each glow is doing, /procglow on | off, /procglow feedback.")
+      .. "/procglow report what each glow is doing, /procglow profile <name> switches profile, "
+      .. "/procglow on | off, /procglow feedback.")
   end
 end

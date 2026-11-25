@@ -4,6 +4,7 @@
 ## Author: Tylesser
 ## Version: @project-version@
 ## SavedVariables: ProcGlowDB
+## SavedVariablesPerCharacter: ProcGlowCharDB
 ## IconTexture: Interface\AddOns\ProcGlow\Media\Icon
 ## X-License: MIT
 ## X-Curse-Project-ID: 1823551
@@ -12,6 +13,7 @@
 
 Tylesser.lua
 Shim.lua
+Profiles.lua
 ProcGlow.lua
 ProcArt.lua
 Options.lua

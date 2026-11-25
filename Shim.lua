@@ -22,15 +22,9 @@ ns.PROC_RING = MEDIA .. "Ring"
 local Q = { toggles = {} }
 ns.qol = Q
 
--- ProcGlowDB (account wide), filled with the toggle's and options' defaults on first use.
-function Q.DB()
-  if Q.db then
-    return Q.db
-  end
-  if type(ProcGlowDB) ~= "table" then
-    ProcGlowDB = {}
-  end
-  local db = ProcGlowDB
+-- ProcGlowDB (account wide; the settings of the profile in use, Profiles.lua), filled with the toggle's and options'
+-- defaults on first use.
+function Q.Fill(db)
   for _, toggle in ipairs(Q.toggles) do
     if db[toggle.key] == nil then
       db[toggle.key] = true -- the addon is installed for this: on from the start
@@ -45,6 +39,17 @@ function Q.DB()
       end
     end
   end
+end
+
+function Q.DB()
+  if Q.db then
+    return Q.db
+  end
+  if type(ProcGlowDB) ~= "table" then
+    ProcGlowDB = {}
+  end
+  local db = ProcGlowDB
+  Q.Fill(db)
   if Q.loaded then
     Q.db = db -- (before ADDON_LOADED the saved table isn't there yet: filled again then)
   end
@@ -227,6 +232,9 @@ events:SetScript("OnEvent", function(self, event, name)
   if event == "ADDON_LOADED" and name == addonName then
     Q.loaded = true
     Q.db = nil
+    if Q.profiles then
+      Q.profiles.Load() -- this character's profile first, then its missing defaults
+    end
     Q.DB()
   elseif event == "PLAYER_LOGIN" then
     Q.running = true
