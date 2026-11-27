@@ -6,6 +6,7 @@ local addonName, ns = ...
 -- option's Disabled() greys it with the reason. /procglow opens it.
 
 local T = ns.T
+local L = ns.L
 local Q = ns.qol
 local P = Q.procglow
 
@@ -160,7 +161,7 @@ end
 -- Profiles at the top of the page (Profiles.lua): the one in use (a picker: switching applies at once), Delete
 -- (two clicks), and a new one from the settings in use now. Never greyed by the main switch: a profile may be the
 -- one that has the glow on. The note under them says what happened, else the hint.
-local PROFILE_HINT = "Each character keeps its own profile. A new one starts as a copy of the settings in use."
+local PROFILE_HINT = L["Each character keeps its own profile. A new one starts as a copy of the settings in use."]
 local function ProfileBlock(parent, width)
   local R = Q.profiles
   local block = CreateFrame("Frame", nil, parent)
@@ -173,8 +174,8 @@ local function ProfileBlock(parent, width)
     label:SetText(text)
     return label
   end
-  Label("Profile", 0)
-  Label("New profile", -(ROW + GAP))
+  Label(L["Profile"], 0)
+  Label(L["New profile"], -(ROW + GAP))
   local note = block:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   note:SetPoint("TOPLEFT", block, "TOPLEFT", LABEL_WIDTH + 2, -(2 * (ROW + GAP)) - 2)
   note:SetWidth(width - LABEL_WIDTH - 10)
@@ -194,44 +195,44 @@ local function ProfileBlock(parent, width)
     end
     Q.OpenChoice(self, choices, R.Active(), function(name)
       local ok, why = R.Switch(name)
-      Say(ok and ("This character uses \"%s\" now."):format(R.Active()) or why)
+      Say(ok and L["This character uses \"%s\" now."]:format(R.Active()) or why)
     end)
   end)
 
-  local delete = T.Button(block, 70, 22, "Delete")
+  local delete = T.Button(block, 70, 22, L["Delete"])
   delete:SetPoint("LEFT", picker, "RIGHT", 8, 0)
   local pending, pendingAt
   delete:SetScript("OnClick", function(self)
     local name = R.Active()
     if pending ~= name or GetTime() - (pendingAt or 0) > CONFIRM_TIME then
       pending, pendingAt = name, GetTime()
-      self:SetText("Sure?")
-      Say(("Click again to delete \"%s\". This character goes back to Default."):format(name))
+      self:SetText(L["Sure?"])
+      Say(L["Click again to delete \"%s\". This character goes back to Default."]:format(name))
       C_Timer.After(CONFIRM_TIME, function()
         if pending == name and GetTime() - pendingAt >= CONFIRM_TIME - 0.05 then
           pending = nil
-          self:SetText("Delete")
+          self:SetText(L["Delete"])
         end
       end)
       return
     end
     pending = nil
-    self:SetText("Delete")
+    self:SetText(L["Delete"])
     local ok, why = R.Delete(name)
-    Say(ok and ("Deleted \"%s\". This character uses Default now."):format(name) or why)
+    Say(ok and L["Deleted \"%s\". This character uses Default now."]:format(name) or why)
   end)
 
   local box = ns.UI.EditBox(block, PICKER_WIDTH - 6, 22)
   box:SetPoint("TOPLEFT", block, "TOPLEFT", LABEL_WIDTH + 6, -(ROW + GAP) - 2)
   box:SetMaxLetters(R.MAX_NAME)
-  local create = T.Button(block, 70, 22, "Create")
+  local create = T.Button(block, 70, 22, L["Create"])
   create:SetPoint("TOPLEFT", block, "TOPLEFT", LABEL_WIDTH + PICKER_WIDTH + 8, -(ROW + GAP) - 2)
   local function Create()
     local name, why = R.Create(box:GetText())
     if name then
       box:SetText("")
       box:ClearFocus()
-      Say(("Made \"%s\" from the settings in use; this character uses it now."):format(name))
+      Say(L["Made \"%s\" from the settings in use; this character uses it now."]:format(name))
     else
       Say(why)
     end
@@ -349,7 +350,7 @@ local function CreateOptions()
   panel = CreateFrame("Frame")
   panel.name = ns.TITLE
   T.OptionsPage(panel, "Proc Glow",
-    "Action buttons glow when an ability procs, with art beside your character and an optional sound.")
+    L["Action buttons glow when an ability procs, with art beside your character and an optional sound."])
   panel:SetScript("OnShow", function()
     if not content then
       Build()
@@ -374,7 +375,7 @@ local loader = CreateFrame("Frame")
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:SetScript("OnEvent", function()
   CreateOptions()
-  T.AddCompartment({ text = ns.TITLE, onClick = ns.OpenOptions, tooltip = { "Click to open the options." } })
+  T.AddCompartment({ text = ns.TITLE, onClick = ns.OpenOptions, tooltip = { L["Click to open the options."] } })
 end)
 
 SLASH_TYLESSERPROCGLOW1 = "/procglow"
@@ -403,17 +404,15 @@ SlashCmdList.TYLESSERPROCGLOW = function(msg)
       for _, one in ipairs(R.Names()) do
         list[#list + 1] = one == R.Active() and ("[" .. one .. "]") or one
       end
-      print(ns.PREFIX .. "Profiles: " .. table.concat(list, ", ") .. ". /procglow profile <name> switches.")
+      print(ns.PREFIX .. L["Profiles: %s. /procglow profile <name> switches."]:format(table.concat(list, ", ")))
     else
       local ok, why = R.Switch(name)
-      print(ns.PREFIX .. (ok and ("profile \"" .. R.Active() .. "\".") or why))
+      print(ns.PREFIX .. (ok and L["profile \"%s\"."]:format(R.Active()) or why))
     end
   elseif command == "on" or command == "off" then
     Q.Set(Q.toggle.key, command == "on")
-    print(ns.PREFIX .. (command == "on" and "on." or "off."))
+    print(ns.PREFIX .. (command == "on" and L["on."] or L["off."]))
   else
-    print(ns.PREFIX .. "/procglow opens the options. /procglow test shows the art, /procglow arts every art, "
-      .. "/procglow report what each glow is doing, /procglow profile <name> switches profile, "
-      .. "/procglow on | off, /procglow feedback.")
+    print(ns.PREFIX .. L["/procglow opens the options. /procglow test shows the art, /procglow arts every art, /procglow report what each glow is doing, /procglow profile <name> switches profile, /procglow on | off, /procglow feedback."])
   end
 end

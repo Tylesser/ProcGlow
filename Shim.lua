@@ -6,12 +6,13 @@ local addonName, ns = ...
 -- theme's accent, the chat prefix, and where the media lives (flat in Media/). WoW Forever only, as Codex.
 
 local T = ns.T
+local L = ns.L
 local MEDIA = "Interface\\AddOns\\" .. addonName .. "\\Media\\"
 
 ns.TITLE = "Tylesser - Proc Glow"
 ns.PREFIX = T.Prefix("Proc Glow")
 ns.PROC_BRAND = "Proc Glow"
-ns.PROC_ART_NAME = "Proc Glow art"
+ns.PROC_ART_NAME = L["Proc Glow art"]
 ns.PROC_FRAMES = "TylesserProcGlow"
 ns.PROC_MEDIA = MEDIA
 ns.PROC_CIRCLE = MEDIA .. "Circle"

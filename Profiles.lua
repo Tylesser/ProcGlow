@@ -16,6 +16,7 @@ local addonName, ns = ...
 -- glows are repainted, the art moves to its place. Not in a fight. Codex has profiles of its own (Profiles.lua
 -- there) that already hold its proc glow settings: this file is the standalone's only.
 
+local L = ns.L
 local Q = ns.qol
 local R = {}
 Q.profiles = R
@@ -203,14 +204,14 @@ end
 function R.Switch(name)
   local real = R.Find(name)
   if not real then
-    return false, ("There is no profile named \"%s\"."):format(Trim(name))
+    return false, L["There is no profile named \"%s\"."]:format(Trim(name))
   end
   if real == R.Active() then
     CharDB().profile = real ~= R.DEFAULT and real or nil
     return true
   end
   if InFight() then
-    return false, "Profiles switch after the fight."
+    return false, L["Profiles switch after the fight."]
   end
   CharDB().profile = real ~= R.DEFAULT and real or nil
   Swap(real)
@@ -222,17 +223,17 @@ end
 function R.CheckName(name)
   name = Trim(name)
   if name == "" then
-    return nil, "Type a name for the new profile."
+    return nil, L["Type a name for the new profile."]
   end
   if #name > R.MAX_NAME then
-    return nil, ("A name has at most %d letters."):format(R.MAX_NAME)
+    return nil, L["A name has at most %d letters."]:format(R.MAX_NAME)
   end
   if name:find("|", 1, true) then
-    return nil, "A name can't have a | in it."
+    return nil, L["A name can't have a | in it."]
   end
   local taken = R.Find(name)
   if taken then
-    return nil, ("There is already a profile named \"%s\"."):format(taken)
+    return nil, L["There is already a profile named \"%s\"."]:format(taken)
   end
   return name
 end
@@ -258,10 +259,10 @@ end
 function R.Delete(name)
   local real = R.Find(name)
   if not real then
-    return false, ("There is no profile named \"%s\"."):format(Trim(name))
+    return false, L["There is no profile named \"%s\"."]:format(Trim(name))
   end
   if real == R.DEFAULT then
-    return false, "The Default profile can't be deleted."
+    return false, L["The Default profile can't be deleted."]
   end
   if real == R.Active() then
     local ok, why = R.Switch(R.DEFAULT)

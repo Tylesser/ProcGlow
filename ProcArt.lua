@@ -1,4 +1,5 @@
 local addonName, ns = ...
+local L = ns.L
 
 -- Proc glow, part 2: art beside your character while an ability procs (the user's ask, 2026-11-19: "like in retail
 -- for Blade of Justice there are 2 swords"), on top of the glowing buttons.
@@ -59,20 +60,20 @@ A.CLEARCASTING = { MAGE = "arcane_missiles", DRUID = "omen" }
 -- proc, white, tinted in the glow colour (branding/source/proc-art-styles.py writes Media/ProcArt/style_<key>.tga).
 -- { key, name, sample colour (the gallery's, while each proc keeps its own colour) }. The second eight (the user's
 -- "more related to the game", the same day): weapons, claws and the schools of magic.
-A.STYLES = { { "flames", "Flames", { 1, 0.45, 0.12 } }, { "runes", "Runes", { 0.45, 0.7, 1 } },
-  { "feathers", "Feathers", { 1, 0.85, 0.45 } }, { "moons", "Crescent moons", { 0.7, 0.75, 1 } },
-  { "lightning", "Lightning", { 0.3, 0.75, 1 } }, { "vines", "Vines", { 0.35, 0.85, 0.35 } },
-  { "crystals", "Crystal shards", { 0.75, 0.45, 1 } }, { "stars", "Stars", { 0.85, 0.85, 1 } },
-  { "swords", "Swords", { 1, 0.4, 0.2 } }, { "daggers", "Daggers", { 0.95, 0.9, 0.4 } },
-  { "arrows", "Arrows", { 0.55, 0.85, 0.35 } }, { "claws", "Claw marks", { 0.95, 0.25, 0.2 } },
-  { "skulls", "Skulls", { 0.6, 0.3, 0.95 } }, { "snowflakes", "Snowflakes", { 0.5, 0.8, 1 } },
-  { "light", "Rays of light", { 1, 0.85, 0.35 } }, { "sigils", "Arcane sigils", { 0.8, 0.45, 1 } } }
+A.STYLES = { { "flames", L["Flames"], { 1, 0.45, 0.12 } }, { "runes", L["Runes"], { 0.45, 0.7, 1 } },
+  { "feathers", L["Feathers"], { 1, 0.85, 0.45 } }, { "moons", L["Crescent moons"], { 0.7, 0.75, 1 } },
+  { "lightning", L["Lightning"], { 0.3, 0.75, 1 } }, { "vines", L["Vines"], { 0.35, 0.85, 0.35 } },
+  { "crystals", L["Crystal shards"], { 0.75, 0.45, 1 } }, { "stars", L["Stars"], { 0.85, 0.85, 1 } },
+  { "swords", L["Swords"], { 1, 0.4, 0.2 } }, { "daggers", L["Daggers"], { 0.95, 0.9, 0.4 } },
+  { "arrows", L["Arrows"], { 0.55, 0.85, 0.35 } }, { "claws", L["Claw marks"], { 0.95, 0.25, 0.2 } },
+  { "skulls", L["Skulls"], { 0.6, 0.3, 0.95 } }, { "snowflakes", L["Snowflakes"], { 0.5, 0.8, 1 } },
+  { "light", L["Rays of light"], { 1, 0.85, 0.35 } }, { "sigils", L["Arcane sigils"], { 0.8, 0.45, 1 } } }
 A.styleKeys = {}
 for _, style in ipairs(A.STYLES) do
   A.styleKeys["style:" .. style[1]] = style
 end
-A.LOOKS = { { "codex", (ns.PROC_ART_NAME or "Codex art") }, { "icon", "The spell's icon" },
-  { "arc", "A plain arc" }, { title = "Styles" } }
+A.LOOKS = { { "codex", (ns.PROC_ART_NAME or L["Codex art"]) }, { "icon", L["The spell's icon"] },
+  { "arc", L["A plain arc"] }, { title = L["Styles"] } }
 for _, style in ipairs(A.STYLES) do
   A.LOOKS[#A.LOOKS + 1] = { "style:" .. style[1], style[2] }
 end
@@ -99,14 +100,14 @@ for _, entry in ipairs(A.CODEX) do
   A.codexKeys[entry[1]] = entry
 end
 
-A.SIZES = { { 0.8, "Small" }, { 1, "Normal" }, { 1.25, "Large" } }
+A.SIZES = { { 0.8, L["Small"] }, { 1, L["Normal"] }, { 1.25, L["Large"] } }
 A.ALPHAS = { { 0.4, "40 %" }, { 0.6, "60 %" }, { 0.8, "80 %" }, { 1, "100 %" } }
-A.SIDES = { { "both", "Both sides" }, { "topbottom", "Top and bottom" }, { "left", "Left side only" },
-  { "right", "Right side only" }, { "top", "Top only" }, { "bottom", "Bottom only" } }
+A.SIDES = { { "both", L["Both sides"] }, { "topbottom", L["Top and bottom"] }, { "left", L["Left side only"] },
+  { "right", L["Right side only"] }, { "top", L["Top only"] }, { "bottom", L["Bottom only"] } }
 -- the two-place choices (a lone proc on both of its places): both sides, and above and below you (2026-11-24, the
 -- user's request); a second proc then takes the places across
 A.PAIRS = { both = { "left", "right" }, topbottom = { "top", "bottom" } }
-A.COLOR_CHOICES = { { "proc", "Each proc's own colour" }, { "glow", "The glow colour" }, { "custom", "Your colour" } }
+A.COLOR_CHOICES = { { "proc", L["Each proc's own colour"] }, { "glow", L["The glow colour"] }, { "custom", L["Your colour"] } }
 -- the option lists in ProcGlow.lua were made before this file ran: fill them in place
 for name, list in pairs(P.artLists or {}) do
   for index, entry in ipairs(A[name] or {}) do
@@ -1080,7 +1081,7 @@ function A.Mover()
   frame.label = UI.Text(frame, "body", 12, "bright")
   frame.label:SetPoint("CENTER")
   frame.label:SetJustifyH("CENTER")
-  frame.label:SetText((ns.PROC_ART_NAME or "Proc art") .. "\nDrag to move it. Right-click: back to the middle.")
+  frame.label:SetText((ns.PROC_ART_NAME or L["Proc art"]) .. "\n" .. L["Drag to move it. Right-click: back to the middle."])
   frame:SetScript("OnDragStart", function(self)
     self.dragging = true
     self:StartMoving()
@@ -1163,6 +1164,17 @@ A.PREVIEW_COORDS = {
 local PREVIEW_PLACES = { both = { "left", "right" }, topbottom = { "top", "bottom" }, left = { "left" },
   right = { "right" }, top = { "top" }, bottom = { "bottom" } }
 
+-- A proc's name as the client writes it (P.ShownName), and a class name from its English one ("Warrior").
+local function Shown(name)
+  return P.ShownName and P.ShownName(name) or name
+end
+
+local function ClassName(text)
+  local names = LOCALIZED_CLASS_NAMES_MALE
+  local own = type(names) == "table" and type(text) == "string" and names[text:upper()]
+  return type(own) == "string" and own or text
+end
+
 local function ChoiceName(list, value)
   for _, entry in ipairs(list) do
     if entry[1] == value then
@@ -1218,7 +1230,7 @@ function A.PreviewPanel(parent)
   panel.name = Line("body", 12, "bright")
   panel.look = Line("body", 11, "muted", panel.name, 3)
   panel.side = Line("body", 11, "muted", panel.look, 2)
-  panel.play = UI.Button(panel, 70, 22, "Play")
+  panel.play = UI.Button(panel, 70, 22, L["Play"])
   panel.play:SetPoint("BOTTOM", panel, "BOTTOM", 0, 6)
   panel.play:SetScript("OnClick", function()
     if panel.current and P.TestProc then
@@ -1254,14 +1266,14 @@ function A.PreviewPanel(parent)
         end
       end
     end
-    panel.name:SetText(name or "")
+    panel.name:SetText(name and Shown(name) or "")
     local look = A.LookFor(name) or A.Look()
     local text = ChoiceName(A.LOOKS, look)
     if art and look == "codex" and art.key == "icon" then
-      text = "The spell's icon"
+      text = L["The spell's icon"]
     end
-    panel.look:SetText(name and ("Art: " .. (text or look)) or "")
-    panel.side:SetText(name and ("Side: " .. (ChoiceName(A.SIDES, side) or side)) or "")
+    panel.look:SetText(name and L["Art: %s"]:format(text or look) or "")
+    panel.side:SetText(name and L["Side: %s"]:format(ChoiceName(A.SIDES, side) or side) or "")
   end
   return panel
 end
@@ -1286,7 +1298,7 @@ function A.Gallery()
       entries[#entries + 1] = entry
     end
     for _, style in ipairs(A.STYLES) do -- the styles after the pieces, in the glow colour
-      entries[#entries + 1] = { "style_" .. style[1], style[2], "Style, any proc", tint = style[3] }
+      entries[#entries + 1] = { "style_" .. style[1], style[2], L["Style, any proc"], tint = style[3] }
     end
     local rows = math.ceil(#entries / GALLERY_COLS)
     frame:SetSize(GALLERY_COLS * CELL_W + 32, rows * CELL_H + 70)
@@ -1294,10 +1306,10 @@ function A.Gallery()
     UI.Panel(frame, { cornerSize = 14 })
     local title = UI.Text(frame, "head", 15, "accent")
     title:SetPoint("TOPLEFT", 16, -14)
-    title:SetText(ns.PROC_ART_NAME or "Codex art")
+    title:SetText(ns.PROC_ART_NAME or L["Codex art"])
     local note = UI.Text(frame, "body", 11, "muted")
     note:SetPoint("LEFT", title, "RIGHT", 12, -1)
-    note:SetText("The art beside your character for each proc " .. BRAND .. " knows, then the styles any proc can use.")
+    note:SetText(L["The art beside your character for each proc %s knows, then the styles any proc can use."]:format(BRAND))
     local close = UI.CloseButton(frame)
     close:SetPoint("TOPRIGHT", -10, -10)
     table.insert(UISpecialFrames, (ns.PROC_FRAMES or "Codex") .. "ProcArtGallery")
@@ -1328,13 +1340,13 @@ function A.Gallery()
       name:SetPoint("LEFT", cell, "LEFT", 4, 0)
       name:SetPoint("RIGHT", cell, "RIGHT", -4, 0)
       name:SetJustifyH("CENTER")
-      name:SetText(entry[2])
+      name:SetText(Shown(entry[2]))
       local class = UI.Text(cell, "body", 11, "muted")
       class:SetPoint("TOP", name, "BOTTOM", 0, -2)
       class:SetPoint("LEFT", cell, "LEFT", 4, 0)
       class:SetPoint("RIGHT", cell, "RIGHT", -4, 0)
       class:SetJustifyH("CENTER")
-      class:SetText(entry[3])
+      class:SetText(ClassName(entry[3]))
       cell.key, cell.left, cell.right, cell.name, cell.tint = entry[1], left, right, name, entry.tint
       frame.cells[index] = cell
     end

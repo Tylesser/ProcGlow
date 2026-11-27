@@ -28,7 +28,14 @@ If you use Codex, its own proc glow does the same; while this addon is loaded, C
 - `/procglow profile` lists your profiles, `/procglow profile <name>` switches to one (not in a fight).
 - `/procglow report` prints what each glow is doing (handy in a bug report).
 
-In combat the game hides most of your buffs from addons. Buff procs then light only while that buff is tracked in the game's cooldown manager, which Proc Glow can still read. Heating Up is the exception: its stacks show in Pyroblast's cast time, which stays readable.
+## Why doesn't a proc glow?
+
+- **In a fight the game hides your buffs from addons.** Buff procs (the paladin's echoes, Shadow Trance, Missile Barrage, your own procs) then light only while that buff is tracked in the game's **cooldown manager**, which Proc Glow can still read. Add the buff to its tracked buffs (icons or bars). Heating Up is the exception: its stacks show in Pyroblast's cast time, which stays readable.
+- **The paladin's echoes** come from the **Unsealed Wrath** talent. At 3 stacks of an echo the seals you could switch to glow (not the one you have on), and the echo's art shows; one or two stacks only build up the glow. Seal of the Crusader has no echo. In a fight, track Unsealed Wrath in the cooldown manager.
+- **Reactive abilities** (Overpower, Execute, Hammer of Wrath, ...) need no setup: they glow whenever the game lets you use them.
+- Still nothing? Type `/procglow report` while the proc is up and send what it prints with `/procglow feedback`.
+
+Languages: English, German, French, Spanish (Spain and Mexico), Russian and Brazilian Portuguese, following your game client.
 
 ## Feedback
 

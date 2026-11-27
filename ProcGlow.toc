@@ -12,6 +12,8 @@
 ## X-Website: https://tylesser.com/procglow/
 
 Tylesser.lua
+Locales.lua
+ProcLocales.lua
 Shim.lua
 Profiles.lua
 ProcGlow.lua

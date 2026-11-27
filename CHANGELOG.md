@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0
+
+- **In your language**: German, French, Spanish, Russian and Brazilian Portuguese game clients now show the addon in their language (other clients stay in English). Russian clients get the game's own font for headings, since the addon's fonts have no Cyrillic letters.
+- **A tip for paladins**: with Unsealed Wrath, a one-time chat line explains when the seal echoes glow (3 stacks, on the seals you could switch to) and that in a fight Unsealed Wrath has to be tracked in the cooldown manager.
+- The page and README now answer "why doesn't a proc glow?".
+- **Other game languages**: the paladin's seal echoes and Clearcasting's spells now light on German, French and other clients too (they were matched by their English names).
+
 ## 1.3.0
 
 - **Profiles**: save your settings as named profiles and switch between them at the top of the options page or with `/procglow profile <name>` (works in a macro, not in a fight). Each character remembers its own profile; a new profile starts as a copy of the settings in use. Your settings so far are the Default profile.
