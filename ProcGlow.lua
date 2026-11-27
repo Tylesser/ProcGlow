@@ -1391,24 +1391,45 @@ function P.Repaint()
   end
 end
 
--- The page's preview: a still icon of ours with the chosen glow always on.
+-- The page's one preview (2026-11-28, the user's requests: one preview for the whole page, not one beside the glow
+-- style and one beside each per-ability list; then "put preview to side panel"): ProcArt.lua's panel
+-- (A.PreviewPanel: the proc's art on its side, its name, art, side and glow style, Play) with the proc's button in
+-- the middle, lit with its glow. It shows the proc hovered in any per-ability list, else the one picked on last, else
+-- your class's first (P.PreviewProc). Each host puts it in a side column: Codex's info panel (the toggle's
+-- `sidePreview`, Modules/QoL/Page.lua), the standalone's options page (Options.lua). Made once, moved to the new
+-- parent when asked again.
+P.previewBoxes = {} -- (the per-ability lists' boxes; kept for the lists' code)
+
 function P.BuildPreview(parent)
-  local box = CreateFrame("Frame", nil, parent)
-  box:SetSize(36, 36)
-  box.icon = box:CreateTexture(nil, "ARTWORK")
-  box.icon:SetAllPoints(box)
-  -- the button of your class's first proc (2026-11-24), else a plain one
-  box.icon:SetTexture(P.ButtonIcon(P.ClassKeys()[1]) or "Interface\\Icons\\Ability_MeleeDamage")
-  if box.icon.SetTexCoord then
-    box.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  local A = P.art
+  local panel = P.pagePreview
+  if not panel then
+    panel = A and A.PreviewPanel and A.PreviewPanel(parent)
+    if not panel then
+      return nil
+    end
+    panel.codexNoSearch = true -- (its proc names are no options: Codex's search skips it)
+    local box = panel.button
+    local radius = P.Rounded()
+    if radius and box then
+      box.mask = ns.UI.RoundMask(box, box.icon, radius, { box.icon }) -- as the rounded action buttons
+    end
+    P.pagePreview, P.preview = panel, box
+  elseif panel.GetParent and panel:GetParent() ~= parent then
+    panel:SetParent(parent)
   end
-  local radius = P.Rounded()
-  if radius then
-    box.mask = ns.UI.RoundMask(box, box.icon, radius, { box.icon }) -- as the rounded action buttons
-  end
-  P.preview = box
+  panel:ClearAllPoints()
+  panel:SetPoint("TOP", parent, "TOP", 0, 0)
+  panel:Show()
+  P.PreviewProc(P.previewProc)
+  return panel
+end
+
+-- Shows a proc in the page's preview (nil: the one picked on last, else your class's first).
+function P.PreviewProc(name)
+  name = name or P.previewPicked or P.ClassKeys()[1]
+  P.previewProc = name
   P.ShowPreview()
-  return box
 end
 
 function P.ShowPreview()
@@ -1416,19 +1437,28 @@ function P.ShowPreview()
   if not box then
     return
   end
-  local key = Wanted()
+  local proc = P.previewProc
+  if box.icon then
+    -- the proc's button (2026-11-24), else a plain one
+    box.icon:SetTexture(P.ButtonIcon(proc) or "Interface\\Icons\\Ability_MeleeDamage")
+  end
+  local key = Wanted(nil, proc)
   if box.glow and box.glow.key ~= key then
     box.glow:Stop()
     box.glow = nil
   end
   if not box.glow then
-    local ok, made = pcall(P.MakeGlow, box, key)
+    local ok, made = pcall(P.MakeGlow, box, key, proc)
     box.glow = ok and made or nil
   else
-    box.glow:Apply(P.Color(), P.Pulse(), P.Thickness())
+    box.glow:Apply(P.ColorFor(proc), P.Pulse(), P.Thickness())
   end
   if box.glow then
     box.glow:Start()
+  end
+  local panel = P.pagePreview
+  if panel and panel.ShowArt then -- (its art and side may have changed too)
+    panel.ShowArt(proc)
   end
 end
 
@@ -2616,30 +2646,38 @@ function P.SetEachFolded(eachKey, folded)
   end
 end
 
--- Preview (optional): function(box) returning a panel with .ShowArt(name), laid right of the rows; it shows the
--- hovered row's proc, else the selected one (the last picker clicked, marked; first row at the start).
+-- Every list drives the page's one preview (P.PreviewProc, 2026-11-28): the hovered row's proc, else the one picked
+-- on last in any list (P.previewPicked, marked in every list), else your class's first.
 -- Swatch (optional): a colour square after the picker (the art's colour per ability, 2026-11-24): Swatch.Color(key)
 -- -> colour, own (set for this proc), usable (its art takes a colour); Swatch.Pick(key); Swatch.Clear(key).
-local function EachList(eachKey, forKey, Choices, Test, Off, Preview, Swatch)
-  local pickerWidth = Swatch and 164 or 190
-  local rowEnd = Test and 398 or Swatch and 362 or 330 -- where a row's widgets end (its bands too)
-  local function ShowPreview(sub, key)
-    if sub.preview then
-      sub.preview.ShowArt(key or sub.selected)
+-- (The sixth argument, a list's own preview, is gone: one preview for the page.)
+local eachSubs = {} -- every list on the page, to mark the picked proc in all of them
+
+local function MarkPicked()
+  for _, sub in ipairs(eachSubs) do
+    for _, row in ipairs(sub.rows or {}) do
+      if row.mark then
+        row.mark:SetShown(P.previewPicked ~= nil and row.key == P.previewPicked)
+      end
     end
   end
-  -- the selected row (the preview's when nothing is hovered): marked only once the player picked on it, never the
+end
+
+local function EachList(eachKey, forKey, Choices, Test, Off, _, Swatch)
+  local pickerWidth = Swatch and 164 or 190
+  local rowEnd = Test and 398 or Swatch and 362 or 330 -- where a row's widgets end (its bands too)
+  local function ShowPreview(_, key)
+    P.PreviewProc(key)
+  end
+  -- the picked row (the preview's when nothing is hovered): marked only once the player picked on it, never the
   -- first row shown by default (it looked selected for no reason: the user's screenshot, 2026-11-24)
   local function Select(sub, key, picked)
     sub.selected = key
     if picked then
       sub.picked = key
+      P.previewPicked = key
     end
-    for _, row in ipairs(sub.rows) do
-      if row.mark then
-        row.mark:SetShown(sub.preview ~= nil and sub.picked ~= nil and row.key == sub.picked)
-      end
-    end
+    MarkPicked()
     ShowPreview(sub, sub.hovered and sub.hovered.key)
   end
   -- one hovered row per list (nil = none): its band, and the preview shows it
@@ -2663,6 +2701,20 @@ local function EachList(eachKey, forKey, Choices, Test, Off, Preview, Swatch)
     box:SetPoint("RIGHT", 0, 0)
     box:SetHeight(1)
     sub.holder, sub.rows = box, {}
+    P.previewBoxes[#P.previewBoxes + 1] = box -- (where the page's preview may slide: P.BuildPreview)
+    local seen = false
+    for index = #eachSubs, 1, -1 do
+      if eachSubs[index] == sub then
+        seen = true
+      elseif eachSubs[index].holder and eachSubs[index].holder.GetParent
+        and eachSubs[index].holder:GetParent() ~= parent and eachSubs[index].forKey == forKey then
+        table.remove(eachSubs, index) -- (an older page's list)
+      end
+    end
+    sub.forKey = forKey
+    if not seen then
+      eachSubs[#eachSubs + 1] = sub
+    end
     local keys = P.ClassKeys()
     local header = CreateFrame("Button", nil, box)
     header:SetHeight(ROW - 4)
@@ -2701,14 +2753,12 @@ local function EachList(eachKey, forKey, Choices, Test, Off, Preview, Swatch)
       row.hover:SetPoint("BOTTOMRIGHT", row, "BOTTOMLEFT", rowEnd, -1)
       row.hover:SetColorTexture(accent[1], accent[2], accent[3], 0.1)
       row.hover:Hide()
-      if Preview then
-        row.mark = row:CreateTexture(nil, "ARTWORK")
-        row.mark:SetPoint("TOPLEFT", -8, 0)
-        row.mark:SetPoint("BOTTOMLEFT", -8, 0)
-        row.mark:SetWidth(3)
-        row.mark:SetColorTexture(accent[1], accent[2], accent[3], 1)
-        row.mark:Hide()
-      end
+      row.mark = row:CreateTexture(nil, "ARTWORK")
+      row.mark:SetPoint("TOPLEFT", -8, 0)
+      row.mark:SetPoint("BOTTOMLEFT", -8, 0)
+      row.mark:SetWidth(3)
+      row.mark:SetColorTexture(accent[1], accent[2], accent[3], 1)
+      row.mark:Hide()
       local function Enter()
         SetHover(sub, row)
       end
@@ -2732,9 +2782,7 @@ local function EachList(eachKey, forKey, Choices, Test, Off, Preview, Swatch)
       row.picker = ns.UI.Picker(row, pickerWidth, 22)
       row.picker:SetPoint("LEFT", 136, 0)
       row.picker:SetScript("OnClick", function(self)
-        if Preview then
-          Select(sub, key, true)
-        end
+        Select(sub, key, true)
         Q.OpenChoice(self, Choices(), (Q.DB()[forKey] or {})[key] or "same", function(value)
           P.SetFor(forKey, key, value)
         end)
@@ -2838,14 +2886,8 @@ local function EachList(eachKey, forKey, Choices, Test, Off, Preview, Swatch)
     box:SetScript("OnHide", function()
       SetHover(sub, nil)
     end)
-    if Preview and sub.count > 0 then
-      local ok, panel = pcall(Preview, box)
-      if ok and panel then
-        panel:SetPoint("TOPLEFT", box, "TOPLEFT", rowEnd + 8, -ROW)
-        sub.preview = panel
-        Select(sub, keys[1])
-      end
-    end
+    sub.selected = keys[1]
+    MarkPicked()
     return box
   end
   local function Refresh(sub, on)
@@ -2854,15 +2896,9 @@ local function EachList(eachKey, forKey, Choices, Test, Off, Preview, Swatch)
     local open = shown and sub.count > 0 and not P.EachFolded(eachKey)
     local enabled = on and not (Off and Off()) and true or false
     local height = (open and sub.count + 1 or 1) * ROW
-    if open and sub.preview then
-      height = math.max(height, ROW + sub.preview:GetHeight() + 4)
-    end
     sub.holder:SetHeight(shown and height or 1)
-    if sub.preview then
-      sub.preview:SetShown(open)
-      if open then
-        ShowPreview(sub)
-      end
+    if open then
+      ShowPreview(sub, sub.hovered and sub.hovered.key) -- (a pick may have changed the art or the glow)
     end
     sub.header:SetShown(shown)
     if sub.header.arrow then
@@ -2954,10 +2990,7 @@ local function SideChoices()
   end
   return list
 end
-local BuildSides, RefreshSides = EachList("procArtSideEach", "procArtSideFor", SideChoices, nil, ArtOff,
-  function(box)
-    return P.art and P.art.PreviewPanel and P.art.PreviewPanel(box)
-  end)
+local BuildSides, RefreshSides = EachList("procArtSideEach", "procArtSideFor", SideChoices, nil, ArtOff)
 
 -- The art per ability: "Same as Art" first, then every look and style.
 local function LookChoices()
@@ -2967,10 +3000,7 @@ local function LookChoices()
   end
   return list
 end
-local BuildLooks, RefreshLooks = EachList("procArtLookEach", "procArtLookFor", LookChoices, nil, ArtOff,
-  function(box)
-    return P.art and P.art.PreviewPanel and P.art.PreviewPanel(box)
-  end,
+local BuildLooks, RefreshLooks = EachList("procArtLookEach", "procArtLookFor", LookChoices, nil, ArtOff, nil,
   { -- a colour per ability (ProcArt.lua: A.ColorFor, saved in procArtColorFor)
     Color = function(key)
       local A = P.art
@@ -3472,9 +3502,11 @@ Q.AddToggle({
   end,
   Enable = P.Enable,
   Changed = P.Changed,
+  -- the page's one preview, in a side column (Codex's info panel, the standalone's options page; P.BuildPreview)
+  sidePreview = function(parent) return P.BuildPreview(parent) end,
   options = {
-    { key = STYLE_KEY, kind = "choice", name = L["Glow style"], default = "auto", choices = P.STYLES, rowHeight = 44,
-      preview = function(holder) return P.BuildPreview(holder) end, Changed = Repainted },
+    { key = STYLE_KEY, section = L["Glow"], kind = "choice", name = L["Glow style"], default = "auto", choices = P.STYLES,
+      Changed = Repainted },
     { key = COLOR_KEY, kind = "choice", name = L["Glow colour"], default = "accent", choices = P.COLORS,
       Changed = Repainted, Disabled = NotForAlert(L["Colour doesn't apply to the game's spell alert."]) },
     { key = SPEED_KEY, kind = "stepper", name = L["Pulse speed"], default = "normal", values = P.SPEEDS,
@@ -3493,7 +3525,7 @@ Q.AddToggle({
     { key = GLOW_EACH_KEY, name = L["Choose the glow per ability"], default = false, Changed = Repainted },
     { key = GLOW_FOR_KEY, kind = "custom", default = {}, Build = BuildGlows, Refresh = RefreshGlows,
       Changed = Repainted },
-    { key = CDM_KEY, name = L["Also on the cooldown manager"], default = true,
+    { key = CDM_KEY, section = true, name = L["Also on the cooldown manager"], default = true,
       Changed = function()
         if P.started then
           P.Scan()
@@ -3509,8 +3541,8 @@ Q.AddToggle({
       Disabled = function()
         return not Q.DB()[CDM_KEY] and L["Needs \"Also on the cooldown manager\"."] or nil
       end },
-    { key = CUSTOM_KEY, kind = "custom", default = {}, Build = BuildCustom, Refresh = RefreshCustom },
-    { key = "procArt", name = L["Art beside your character while an ability procs"], default = true,
+    { key = CUSTOM_KEY, section = true, kind = "custom", default = {}, Build = BuildCustom, Refresh = RefreshCustom },
+    { key = "procArt", section = L["Art"], name = L["Art beside your character while an ability procs"], default = true,
       Changed = function() if P.art then P.art.Refresh() end end },
     { key = "procArtCombat", name = L["Art only in combat"], default = false, Changed = ArtRefresh, Disabled = ArtOff },
     { key = "procArtBuild", name = L["Show stacking procs as they build up"], default = true,
@@ -3542,7 +3574,7 @@ Q.AddToggle({
       Changed = ArtRefresh, Disabled = ArtOff },
     { key = "procArtAlpha", kind = "stepper", name = L["Art opacity"], default = 0.8, values = ArtChoice("ALPHAS"),
       Changed = ArtRefresh, Disabled = ArtOff },
-    { key = SOUND_KEY, name = L["Play a sound when an ability procs"], default = false },
+    { key = SOUND_KEY, section = L["Sound"], name = L["Play a sound when an ability procs"], default = false },
     { key = KIT_KEY, kind = "choice", name = L["Sound"], default = "ping", choices = P.SoundChoices(false),
       button = { name = L["Test"], Click = function() P.Play() end } },
     { key = COMBAT_KEY, name = L["Only in combat"], default = true },

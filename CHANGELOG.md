@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0
+
+- **One preview for the whole options page**: instead of a glow preview beside the glow style and one beside each per-ability list, a single preview shows a proc as it will look: its button with its glow, its art on its side or sides, and its art, side and glow style written under it, with Play. Hover or pick an ability in any list to see it there. It sits in a column beside the options, so it never covers them.
+- **Clearer options page**: the options come in titled sections (Glow, Art, Sound), with thin lines between the smaller groups.
+- **Tylesser settings window**: the options now open in a window of their own with room for everything, every Tylesser addon you have listed on its left. Options > AddOns has one **Tylesser** entry that opens it.
+
 ## 1.4.0
 
 - **In your language**: German, French, Spanish, Russian and Brazilian Portuguese game clients now show the addon in their language (other clients stay in English). Russian clients get the game's own font for headings, since the addon's fonts have no Cyrillic letters.

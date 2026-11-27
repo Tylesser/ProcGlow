@@ -11,6 +11,7 @@ local Q = ns.qol
 local P = Q.procglow
 
 local LABEL_WIDTH, PICKER_WIDTH, ROW, GAP = 200, 220, 26, 6
+local SIDE_W, SIDE_GAP = 170, 16 -- the preview's column right of the options
 local PROFILE_H, CONFIRM_TIME = 92, 4
 local panel, content, rows, items = nil, nil, {}, {}
 
@@ -50,6 +51,7 @@ local function OptionRow(parent, option, width)
     end)
     row.button = button
     note:SetPoint("LEFT", button, "RIGHT", 10, 0)
+    note:SetPoint("RIGHT", row, "RIGHT", 0, 0)
   else
     local label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     label:SetPoint("LEFT", row, "LEFT", 4, 0)
@@ -98,6 +100,7 @@ local function OptionRow(parent, option, width)
         row:SetHeight(math.max(ROW, option.rowHeight or ROW))
       end
       note:SetPoint("TOPLEFT", picker, "BOTTOMLEFT", 2, -2)
+      note:SetWidth(width - LABEL_WIDTH - 4)
     elseif kind == "stepper" then
       local less = T.Button(row, 22, 22, "<")
       less:SetPoint("LEFT", row, "LEFT", LABEL_WIDTH, 0)
@@ -121,6 +124,7 @@ local function OptionRow(parent, option, width)
       more:SetScript("OnClick", function() Step(1) end)
       row.less, row.more, row.value = less, more, value
       note:SetPoint("LEFT", more, "RIGHT", 10, 0)
+      note:SetPoint("RIGHT", row, "RIGHT", 0, 0)
     end
   end
 
@@ -252,11 +256,18 @@ local function ProfileBlock(parent, width)
   return block
 end
 
--- Stacks the rows and the per-ability lists (custom options) top down; a list's height changes as it opens.
+-- Stacks the rows and the per-ability lists (custom options) top down; a list's height changes as it opens. A group
+-- heading (option.section) gets room above and below it.
+local SECTION_ABOVE, SECTION_BELOW = 10, 8
 local function Layout()
   local y = panel.top or 0
   for _, item in ipairs(items) do
-    if item.row then
+    if item.heading then
+      y = y + SECTION_ABOVE
+      item.heading:ClearAllPoints()
+      item.heading:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+      y = y + item.heading:GetHeight() + SECTION_BELOW
+    elseif item.row then
       item.row:ClearAllPoints()
       item.row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
       y = y + item.row:GetHeight() + GAP + item.extra
@@ -302,10 +313,23 @@ end
 Q.RefreshPage = Refresh
 
 local function Build()
-  local width = 560
+  -- as wide as the page allows beside the preview column (Tylesser's settings window is wider than the game's canvas)
+  local room = (panel:GetWidth() or 0) - 14 - (30 + SIDE_W + SIDE_GAP) - 10
+  local width = math.max(560, math.min(720, math.floor(room)))
   local scroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
   scroll:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, T.OPTIONS_TOP)
-  scroll:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -30, 14)
+  -- the options scroll on the left, the page's one preview stays in a column on the right (2026-11-28, the user's
+  -- request: "put preview to side panel", as in Codex; it sat over the notes)
+  scroll:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -(30 + SIDE_W + SIDE_GAP), 14)
+  local side = CreateFrame("Frame", nil, panel)
+  side:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -14, T.OPTIONS_TOP)
+  side:SetSize(SIDE_W, 240)
+  panel.side = side
+  local toggleDef = Q.toggle
+  if toggleDef and toggleDef.sidePreview then
+    local ok, frame = pcall(toggleDef.sidePreview, side, SIDE_W)
+    panel.preview = ok and frame or nil
+  end
   content = CreateFrame("Frame", nil, scroll)
   content:SetSize(width, 400)
   scroll:SetScrollChild(content)
@@ -313,8 +337,11 @@ local function Build()
   if Q.profiles then
     panel.profiles = ProfileBlock(content, width)
     panel.profiles:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
+    -- a line between the profiles and the settings (2026-11-28, the user's request: the sections ran together)
+    panel.profileLine = T.Divider(content, width, 13)
+    panel.profileLine:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -PROFILE_H)
   end
-  local top = panel.profiles and PROFILE_H or 0
+  local top = panel.profiles and (PROFILE_H + 18) or 0
   local toggle = Q.toggle
   local main = T.Check(content, toggle.name)
   main:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -top)
@@ -327,10 +354,17 @@ local function Build()
   desc:SetWidth(width - 10)
   desc:SetJustifyH("LEFT")
   desc:SetText(toggle.desc or "")
-  local y = top + 30 + math.max(28, math.ceil((#(toggle.desc or "")) / 95) * 13) + 12
+  local y = top + 30 + math.max(28, math.ceil((#(toggle.desc or "")) / math.floor(width / 5.9)) * 13) + 12
 
   panel.top, panel.items = y, items
   for _, option in ipairs(toggle.options or {}) do
+    -- a group of options starts here (2026-11-28, the user's request): option.section = its title (a heading
+    -- across the page), or true (a line only)
+    if option.section then
+      local heading = type(option.section) == "string" and T.Heading(content, option.section, width)
+        or T.Divider(content, width, 13)
+      items[#items + 1] = { option = option, heading = heading }
+    end
     if option.kind == "custom" then
       local sub = {}
       option.Build(content, rows[#rows] or main, sub) -- (placed by Layout)
@@ -357,18 +391,12 @@ local function CreateOptions()
     end
     Refresh()
   end)
-  if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
-    local category = Settings.RegisterCanvasLayoutCategory(panel, ns.TITLE)
-    Settings.RegisterAddOnCategory(category)
-    ns.optionsCategory = category
-  end
+  -- shown in Tylesser's own settings window (Tylesser.lua T.RegisterOptions, 2026-11-28)
+  ns.optionsCategory = ns.T.RegisterOptions(panel, ns.TITLE)
 end
 
 function ns.OpenOptions()
-  if ns.optionsCategory and Settings and Settings.OpenToCategory then
-    local id = ns.optionsCategory.GetID and ns.optionsCategory:GetID() or ns.optionsCategory.ID
-    Settings.OpenToCategory(id)
-  end
+  ns.T.OpenOptions(ns.optionsCategory)
 end
 
 local loader = CreateFrame("Frame")

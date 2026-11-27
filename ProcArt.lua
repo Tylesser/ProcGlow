@@ -1150,10 +1150,12 @@ end
 -- The preview beside the per-ability lists (art and side; the user's requests, 2026-11-23): one proc's art as it
 -- would show round you, on its side (both = left and right, else left, right, top or bottom: the side piece turned a
 -- quarter, outer edge outwards), tinted like the real one (its own colour too), the icon look's icon on each piece;
--- under it the proc's name, its art and side. The glow's preview stays beside the glow style (the user, 2026-11-24).
+-- under it the proc's name, its art, side and glow style. Since 2026-11-28 it is the page's only preview (the user's
+-- request: one preview, not one per setting): `panel.button` in the middle is the proc's button, which
+-- ProcGlow.lua lights with its glow (P.preview).
 -- panel.ShowArt(name) draws a proc; nil empties it.
-A.PREVIEW_W, A.PREVIEW_H = 160, 204 -- (Play under the lines: the proc's art, glow and sound together, 2026-11-24)
-local SCENE_H, PIECE, GAP = 124, 36, 10 -- piece = the short edge (side pieces are 1:2)
+A.PREVIEW_W, A.PREVIEW_H = 160, 218 -- (Play under the lines: the proc's art, glow and sound together, 2026-11-24)
+local SCENE_H, PIECE, GAP, BUTTON = 124, 36, 21, 30 -- piece = the short edge (side pieces are 1:2)
 -- the side file's corners for each place (SetTexCoord's eight: UL, LL, UR, LR), outer edge outwards
 A.PREVIEW_COORDS = {
   left = { 0, 0, 0, 1, 1, 0, 1, 1 },
@@ -1216,6 +1218,16 @@ function A.PreviewPanel(parent)
     icon:SetPoint("CENTER", piece, "CENTER")
     panel.pieces[place], panel.icons[place] = piece, icon
   end
+  -- the proc's button between the pieces, lit with its glow by ProcGlow.lua
+  local button = CreateFrame("Frame", nil, scene)
+  button:SetSize(BUTTON, BUTTON)
+  button:SetPoint("CENTER", scene, "CENTER", 0, 0)
+  button.icon = button:CreateTexture(nil, "ARTWORK")
+  button.icon:SetAllPoints(button)
+  if button.icon.SetTexCoord then
+    button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  end
+  panel.button = button
   local function Line(kind, size, color, above, gap)
     local text = UI.Text(panel, kind, size, color)
     if above then
@@ -1230,6 +1242,7 @@ function A.PreviewPanel(parent)
   panel.name = Line("body", 12, "bright")
   panel.look = Line("body", 11, "muted", panel.name, 3)
   panel.side = Line("body", 11, "muted", panel.look, 2)
+  panel.glowLine = Line("body", 11, "muted", panel.side, 2)
   panel.play = UI.Button(panel, 70, 22, L["Play"])
   panel.play:SetPoint("BOTTOM", panel, "BOTTOM", 0, 6)
   panel.play:SetScript("OnClick", function()
@@ -1274,6 +1287,8 @@ function A.PreviewPanel(parent)
     end
     panel.look:SetText(name and L["Art: %s"]:format(text or look) or "")
     panel.side:SetText(name and L["Side: %s"]:format(ChoiceName(A.SIDES, side) or side) or "")
+    local style = name and P.StyleFor and P.StyleFor(name)
+    panel.glowLine:SetText(style and L["Glow: %s"]:format(ChoiceName(P.STYLES or {}, style) or style) or "")
   end
   return panel
 end

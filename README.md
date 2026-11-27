@@ -9,20 +9,20 @@ A World of Warcraft addon for **WoW Forever** that makes your **action buttons g
 - **Reactive abilities glow** while they can be used: Overpower, Revenge, Execute, Riposte, Counterattack, Mongoose Bite, Hammer of Wrath (and Victory Rush where the game has it).
 - **Buff procs glow** the spells they empower: Shadow Bolt with Shadow Trance (Nightfall), Arcane Missiles with Missile Barrage, Pyroblast at 3 stacks of Heating Up, the paladin's seals with Unsealed Wrath's echoes at 3 stacks. Clearcasting shows only its art, no glow on the buttons.
 - What the game already lights itself keeps the game's glow.
-- **Glow styles**: the game's spell alert, a pulsing border, marching sparkles, a soft glow, a flash or a ring, with a preview. Colour (gold, class or a fixed colour), pulse speed and thickness.
+- **Glow styles**: the game's spell alert, a pulsing border, marching sparkles, a soft glow, a flash or a ring. Colour (gold, class or a fixed colour), pulse speed and thickness.
 - **Cooldown manager**: the glow on its icons too, and optionally in place of the game's square glow.
 - **Art beside your character**: a piece drawn for each proc, sixteen styles for any proc (flames, runes, feathers, crescent moons, lightning, vines, crystal shards, stars, swords, daggers, arrows, claw marks, skulls, snowflakes, rays of light, arcane sigils), the spell's icon or a plain arc, for all procs or per ability. Each proc shows in its own colour, or in the glow colour or one you pick. Several procs show together: two left and right, a third on top, a fourth below; or all on one side you choose, left, right, top or bottom (**Art side**). Each ability can also get a side of its own. Size and opacity, with "Show the art" and "Show all arts".
-- **Sound** when a proc starts (off until you switch it on): 14 sounds made for procs (or each proc its own: blades for Overpower, fire for Heating Up, ...) and 14 of the game's, soft or loud, only in combat if you like, on the Master channel if you want, and a different sound per ability. The per-ability lists show your class's procs and fold up; the art and side lists have a preview beside them, and each ability can get its own art colour.
+- **Sound** when a proc starts (off until you switch it on): 14 sounds made for procs (or each proc its own: blades for Overpower, fire for Heating Up, ...) and 14 of the game's, soft or loud, only in combat if you like, on the Master channel if you want, and a different sound per ability. The per-ability lists show your class's procs and fold up, and each ability can get its own art colour.
 
 - **Your own procs**: a buff of yours lights a spell on your bars. Pick them from a window: your buffs, gear, consumables in your bags and your spells, by category. In a fight the game hides most buffs from addons, so track the buff in the cooldown manager.
 - **Profiles**: keep several sets of settings (a glow and sound for each of your characters, a quiet one for levelling, ...) and switch between them at the top of the options page or with `/procglow profile <name>`, also from a macro. Each character remembers its own profile; a new one starts as a copy of the settings in use.
-- **More**: a faint glow while you can't cast the spell yet, a glow style and colour per ability, stacking procs building up (one arc, two arcs, then the symbol), Move the art (also in Edit Mode), art only in combat, Play in the preview panel and the time between sounds.
+- **More**: a faint glow while you can't cast the spell yet, a glow style and colour per ability, stacking procs building up (one arc, two arcs, then the symbol), Move the art (also in Edit Mode), art only in combat, the time between sounds, and one preview on the options page that shows any ability's glow, art and side together (hover it in a list), with Play.
 
 If you use Codex, its own proc glow does the same; while this addon is loaded, Codex leaves the job to it.
 
 ## Usage
 
-- Esc > Options > AddOns > **Tylesser - Proc Glow**, or `/procglow`.
+- `/procglow`, or Esc > Options > AddOns > **Tylesser** > Open Tylesser settings. The options open in Tylesser's own settings window.
 - `/procglow test` shows the art for a few seconds, `/procglow arts` every piece of art.
 - `/procglow on` / `/procglow off` switches it.
 - `/procglow profile` lists your profiles, `/procglow profile <name>` switches to one (not in a fight).
