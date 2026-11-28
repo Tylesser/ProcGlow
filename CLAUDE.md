@@ -20,4 +20,9 @@ user's request). **WoW Forever only** (Interface 16001), like Codex. Workspace c
 - Media: flat in `Media/` (Glow*, ProcSide, ProcIconMask, ProcArt/*.tga from Codex's `Modules/QoL/Media`, Circle from
   Codex's Media, Ring from Codex's Buffs). New Codex art (`branding/source/proc-codex-art.py` in Codex) is copied here too.
 - Icon: `branding/source/icons.js <depsDir> <outDir>` (resvg-js), `Media/Icon.tga` from its Icon.tga.
-- Test: `node tools/harness/run.js pg_test.lua E:/Games/Wow/Addons/ProcGlow` (from tools/harness).
+- Test: `node tools/harness/run.js pg_test.lua E:/Games/Wow/Addons/ProcGlow` (from tools/harness). The shared
+  files' behaviour is tested in Codex's `codex_procglow*_test.lua` / `codex_procart_test.lua` (the warning before a
+  proc ends: `codex_procglow_end_test.lua`).
+- Ending soon (2026-11-28, in the shared ProcGlow.lua: `P.Endings`, `P.HookRefresh`, `P.EndSounds`, ProcArt's
+  `piece.flash` / `A.SetFlash`): see the comment block above `P.ViewerAuras` and Codex's CLAUDE.md. Options
+  `procEndWarn` (off), `procEndTime` (2 s), `procEndSound` ("none"), section "Ending soon" at the end of the page.

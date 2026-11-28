@@ -39,6 +39,8 @@ local DIM_KEY = "procGlowDim"
 local GLOW_EACH_KEY, GLOW_FOR_KEY, GLOW_COLOR_FOR_KEY = "procGlowEach", "procGlowStyleFor", "procGlowColorFor"
 local GAP_KEY = "procSoundGap"
 local CUSTOM_KEY = "procCustom" -- { { buff = name or spell ID, spell = name (or ID), class = class token } }
+-- 2026-11-28 (the user's "do all" of the suggestion list): a warning in the last seconds of a buff proc
+local END_KEY, END_TIME_KEY, END_SOUND_KEY = "procEndWarn", "procEndTime", "procEndSound"
 P.SOUND_GAP = 1.5 -- seconds between two proc sounds, across all procs (the default of GAP_KEY)
 P.GAPS = { { 0.5, L["Short (0.5 s)"] }, { 1.5, L["Normal (1.5 s)"] }, { 3, L["Long (3 s)"] } }
 P.DIM = 0.35 -- a faint glow's strength
@@ -60,15 +62,16 @@ P.REACTIVE = {
 -- Buff procs: while the buff is on you, these spells glow (class = only for that class; stacks = only from that many
 -- stacks of the buff; notActive = not a spell whose own buff is on you; artOnly = the art beside you and the sound,
 -- no glow on the buttons: Clearcasting, the user's request 2026-11-22; listClass = only whose per-ability lists show
--- it, the glow works for anyone with the buff).
+-- it, the glow works for anyone with the buff; duration = the buff's base time in seconds from Forever's game data,
+-- wago.tools wowf SpellMisc.DurationIndex -> SpellDuration, for the warning before it ends: P.Endings).
 P.AURAS = {
-  { name = "Shadow Trance", ids = { 17941 }, spells = { "Shadow Bolt" }, listClass = "WARLOCK",
+  { name = "Shadow Trance", ids = { 17941 }, spells = { "Shadow Bolt" }, listClass = "WARLOCK", duration = 10,
     spellIDs = { 686, 695, 705, 1088, 1106, 7641, 11659, 11660, 11661, 25307 } },
-  { name = "Clearcasting", ids = { 12536 }, class = "MAGE", artOnly = true,
+  { name = "Clearcasting", ids = { 12536 }, class = "MAGE", artOnly = true, duration = 15,
     spells = { "Arcane Missiles", "Arcane Explosion", "Blizzard", "Flamestrike" } },
-  { name = "Clearcasting", ids = { 16870 }, class = "DRUID", artOnly = true,
+  { name = "Clearcasting", ids = { 16870 }, class = "DRUID", artOnly = true, duration = 15,
     spells = { "Shred", "Maul", "Healing Touch", "Regrowth" } },
-  { name = "Clearcasting", ids = { 16246 }, class = "SHAMAN", artOnly = true,
+  { name = "Clearcasting", ids = { 16246 }, class = "SHAMAN", artOnly = true, duration = 15,
     spells = { "Lightning Bolt", "Chain Lightning", "Chain Heal" } },
   -- Missile Barrage (the user's request, 2026-11-22): the buff makes the next Arcane Missiles faster. Forever's own
   -- buff 1326083 and the older Season of Discovery ones (wago.tools wowf SpellName / SpellEffect); notIDs: the talent
@@ -79,11 +82,11 @@ P.AURAS = {
   -- cooldown manager when the buff is tracked there (secretStacks), as for the paladin echoes, and better from
   -- Pyroblast's cast time (castTime: P.CastStacks; a critical strike gives two stacks at once).
   { name = "Heating Up", ids = { 400625 }, notIDs = { [400624] = true, [460878] = true }, class = "MAGE",
-    stacks = 3, secretStacks = true, spells = { "Pyroblast" },
+    stacks = 3, secretStacks = true, spells = { "Pyroblast" }, duration = 20,
     castTime = { spell = 11366, ref = 133, step = 0.25 }, -- Pyroblast and Fireball (rank 1), -25 % a stack
     spellIDs = { 11366, 12505, 12522, 12523, 12524, 12525, 12526, 18809 } },
   { name = "Missile Barrage", ids = { 1326083, 400589, 467409 }, notIDs = { [400588] = true, [401736] = true },
-    class = "MAGE", spells = { "Arcane Missiles" },
+    class = "MAGE", spells = { "Arcane Missiles" }, duration = 15,
     spellIDs = { 5143, 5144, 5145, 8416, 8417, 10211, 10212, 25345 } },
 }
 
@@ -108,7 +111,7 @@ P.SPELL_IDS = {
 for _, echo in ipairs({ { "Fury", 1311701 }, { "Command", 1311703 }, { "Righteousness", 1311704 },
   { "Justice", 1311705 }, { "Light", 1328198 }, { "Wisdom", 1328206 } }) do
   P.AURAS[#P.AURAS + 1] = { name = "Echo of " .. echo[1], ids = { echo[2] }, class = "PALADIN", stacks = 3,
-    secretStacks = true, notActive = true, spells = P.SEALS, seal = "Seal of " .. echo[1] }
+    secretStacks = true, notActive = true, spells = P.SEALS, seal = "Seal of " .. echo[1], duration = 15 }
 end
 
 -- The sounds: { key, text, SOUNDKIT name, its ID, group }; the game's own (names and IDs from
@@ -1353,13 +1356,24 @@ function P.Glow(button, proc)
   return made
 end
 
-local function SetGlow(button, on, proc, dim)
+-- The glow's pulse: faster (P.END_PULSE) while its proc is about to end (P.Endings).
+function P.PulseFor(glow)
+  return P.Pulse() * (glow and glow.ending and P.END_PULSE or 1)
+end
+
+local function SetGlow(button, on, proc, dim, ending)
   local glow = on and P.Glow(button, proc) or P.glows[button]
   if not glow then
     return
   end
   if on and glow.dim ~= (dim and true or false) then
     SetDim(glow, dim)
+  end
+  ending = on and ending and true or false
+  if (glow.ending or false) ~= ending then
+    glow.ending = ending
+    glow:Apply(P.ColorFor(glow.proc), P.PulseFor(glow), P.Thickness())
+    SetDim(glow, glow.dim)
   end
   if on and not glow.lit then
     glow.lit = true
@@ -1379,7 +1393,7 @@ function P.Repaint()
         SetDim(P.Glow(button, glow.proc) or glow, dim)
       end
     else
-      glow:Apply(P.ColorFor(glow.proc), P.Pulse(), P.Thickness())
+      glow:Apply(P.ColorFor(glow.proc), P.PulseFor(glow), P.Thickness())
       SetDim(glow, glow.dim)
     end
   end
@@ -1510,7 +1524,7 @@ end
 P.Counted = Counted
 
 function P.ActiveAuras()
-  local active = { names = {}, counts = {} }
+  local active = { names = {}, counts = {}, ends = {} }
   local read = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
   if type(read) ~= "function" then
     return active
@@ -1552,6 +1566,13 @@ function P.ActiveAuras()
     end
     if match then
       active[match] = true
+      -- its end, while the game lets us read it (out of a fight, or a buff on Blizzard's allow list): exact
+      local expires, length = aura.expirationTime, aura.duration
+      if Readable(expires) and Readable(length) and type(expires) == "number" and type(length) == "number"
+        and expires > 0 and length > 0 then
+        active.ends[match] = expires
+        P.learnedDuration[match] = length
+      end
     end
   end
   P.ViewerAuras(active, known)
@@ -1846,6 +1867,133 @@ function P.ForgetCast()
   end
 end
 
+-- Ending soon (2026-11-28) ------------------------------------------------------------------------------------
+-- In the last seconds of a buff proc (the option: 1-5 s) its glow pulses faster, its art flashes, and a sound plays
+-- if one is picked. Only buff procs have a time: the reactive abilities (Overpower, Revenge, ...) light up from the
+-- game's usable state, which says nothing about how long. A buff's end comes, in this order:
+--  * its own expirationTime, while readable (out of a fight, or on Blizzard's allow list): exact; its readable
+--    `duration` is remembered for the session (P.learnedDuration), so your own procs get a time too;
+--  * in a fight (the time is secret then): when it lit, or last changed, plus its duration (P.learnedDuration, else
+--    the entry's `duration` from the game data). "Changed" = its stack count moved (P.ActiveAuras' counts) or its
+--    cooldown manager item was updated (P.HookRefresh: Blizzard's viewer calls the item's OnUnitAuraUpdatedEvent
+--    for a refresh or a new stack, forever Blizzard_CooldownViewer CooldownViewerMixin:OnUnitAura). In a fight a
+--    buff proc is only seen at all through the cooldown manager (or Heating Up's cast time), so that's where it
+--    works there. No duration known = no warning (a guessed time would flash at the wrong moment).
+P.END_TIMES = {}
+for seconds = 1, 5 do
+  P.END_TIMES[seconds] = { seconds, L["%d s"]:format(seconds) }
+end
+P.END_TIME = 2 -- the default
+P.END_PULSE = 0.35 -- the glow's pulse time while ending (about three times as fast)
+P.ends = {} -- [aura entry] = { start, count, refreshAt, exact, exactAt, ends }
+P.learnedDuration = {} -- [aura entry] = seconds (read from the buff itself this session)
+P.refreshHooked = {}
+P.endingKeys = {}
+
+function P.EndWarnOn()
+  return Q.DB()[END_KEY] == true
+end
+
+function P.EndWarnTime()
+  local value = Num(Q.DB()[END_TIME_KEY])
+  return value and math.max(1, math.min(5, value)) or P.END_TIME
+end
+
+function P.ProcDuration(match)
+  return P.learnedDuration[match] or match.duration
+end
+
+-- A cooldown manager item of a listed buff was updated (refreshed, or a stack): its time starts again.
+function P.ItemRefreshed(item)
+  local match = P.started and ViewerMatch(item)
+  if not match then
+    return
+  end
+  local state = P.ends[match]
+  if state then
+    state.refreshAt = GetTime()
+  end
+  P.UpdateSoon()
+end
+
+function P.HookRefresh(item)
+  if P.refreshHooked[item] or type(item.OnUnitAuraUpdatedEvent) ~= "function" then
+    return
+  end
+  P.refreshHooked[item] = true
+  hooksecurefunc(item, "OnUnitAuraUpdatedEvent", P.ItemRefreshed)
+end
+
+-- From P.Update: the lit buff procs' end times (P.ends). Returns [proc name] = true for those in their last seconds,
+-- and the next time something changes (a warning starts or ends) for P.WakeAt.
+function P.Endings(auras)
+  local ending, nextAt = {}, nil
+  if not P.EndWarnOn() then
+    P.ends = {}
+    return ending, nil
+  end
+  local now, warn, seen = GetTime(), P.EndWarnTime(), {}
+  for match, on in pairs(auras) do
+    if type(match) == "table" and match.name and match.ids and on then
+      seen[match] = true
+      local count = auras.counts and auras.counts[match]
+      local state = P.ends[match]
+      if not state then
+        state = { start = now, count = count }
+        P.ends[match] = state
+      else
+        if count and state.count and count ~= state.count then
+          state.start = now -- a stack more (or less): its time starts again
+        end
+        state.count = count or state.count
+        if state.refreshAt and state.refreshAt > state.start then
+          state.start = state.refreshAt
+        end
+      end
+      local exact = auras.ends and auras.ends[match]
+      if exact then
+        state.exact, state.exactAt = exact, now
+      end
+      local length = P.ProcDuration(match)
+      local ends
+      if exact then
+        ends = exact
+      elseif state.exact and state.exactAt and state.start <= state.exactAt then
+        ends = state.exact -- read before the fight hid it, not changed since
+      elseif length then
+        ends = state.start + length
+      end
+      state.ends = ends
+      if ends then
+        local from = ends - warn
+        if now >= from and now < ends then
+          ending[match.name] = true
+          nextAt = (not nextAt or ends < nextAt) and ends or nextAt
+        elseif now < from then
+          nextAt = (not nextAt or from < nextAt) and from or nextAt
+        end
+      end
+    end
+  end
+  for match in pairs(P.ends) do
+    if not seen[match] then
+      P.ends[match] = nil -- it's gone: the next one starts afresh
+    end
+  end
+  return ending, nextAt
+end
+
+-- The warning's sound, once per proc as its last seconds start.
+function P.EndSounds(ending)
+  local choice = Q.DB()[END_SOUND_KEY]
+  for name in pairs(ending) do
+    if not P.endingKeys[name] and choice and choice ~= "none" then
+      P.Play(P.ResolveSound(choice, name))
+    end
+  end
+  P.endingKeys = ending
+end
+
 function P.ViewerAuras(active, known)
   for _, name in ipairs(P.BUFF_VIEWERS) do
     local viewer = _G[name]
@@ -1857,6 +2005,9 @@ function P.ViewerAuras(active, known)
           local match = Readable(on) and ViewerMatch(item)
           if match and match.stacks and match.secretStacks then
             P.HookStacks(item, match)
+          end
+          if match then
+            P.HookRefresh(item)
           end
           if match and on == true and not active[match] then
             local cached = rawget(item, "auraDataCached")
@@ -2069,6 +2220,7 @@ function P.Update()
     return
   end
   local auras = P.ActiveAuras()
+  local ending, endWake = P.Endings(auras)
   local dimOn = Q.DB()[DIM_KEY] ~= false
   local test = P.testProc and P.testProc.name
   local lit, shown, order = {}, {}, {}
@@ -2131,6 +2283,9 @@ function P.Update()
       end
     end
   end
+  if endWake and (not wake or endWake < wake) then
+    wake = endWake
+  end
   P.WakeAt(wake)
   for button in pairs(P.glows) do
     if not shown[button] then
@@ -2138,8 +2293,9 @@ function P.Update()
     end
   end
   for button, want in pairs(shown) do
-    SetGlow(button, true, want.key, want.dim)
+    SetGlow(button, true, want.key, want.dim, ending[want.key])
   end
+  P.EndSounds(ending)
   -- the game's alert is see-through only while it is up and our glow shows in its place
   local replace, hide = P.ReplaceGame(), {}
   for _, item in ipairs(P.watch) do
@@ -2181,7 +2337,7 @@ function P.Update()
     table.sort(build, function(a, b)
       return a.name < b.name
     end)
-    P.art.Update(artOrder, build, stacks)
+    P.art.Update(artOrder, build, stacks, ending)
   end
 end
 
@@ -3476,6 +3632,13 @@ local function RefreshCustom(sub, on)
   sub.holder:SetAlpha(on and 1 or 0.5)
 end
 
+local function EndOff()
+  if not P.EndWarnOn() then
+    return L["Needs \"Warn when a proc is about to end\"."]
+  end
+  return nil
+end
+
 local function NotForAlert(why)
   return function()
     if P.Style() == "alert" then
@@ -3582,5 +3745,21 @@ Q.AddToggle({
     { key = MASTER_KEY, name = L["Play it on the Master channel (heard even with sound effects off)"], default = false },
     { key = EACH_KEY, name = L["Choose a sound per ability"], default = false },
     { key = FOR_KEY, kind = "custom", default = {}, Build = BuildEach, Refresh = RefreshEach },
+    { key = END_KEY, section = L["Ending soon"], name = L["Warn when a proc is about to end"], default = false,
+      desc = L["In its last seconds the glow pulses faster and the art flashes."]
+        .. " " .. L["Only for buff procs such as Shadow Trance, Clearcasting, Heating Up, Missile Barrage and the seal echoes: Overpower, Revenge and the other abilities that light up after a dodge or parry have no time the game gives."]
+        .. " " .. L["In a fight the game hides your buffs' times: there it counts from when the proc lit, which works for buffs you track in the cooldown manager."],
+      Changed = function() if P.started then P.Update() end end },
+    { key = END_TIME_KEY, kind = "stepper", name = L["Warn this long before it ends"], default = P.END_TIME,
+      values = P.END_TIMES, Changed = function() if P.started then P.Update() end end, Disabled = EndOff },
+    { key = END_SOUND_KEY, kind = "choice", name = L["Sound as it's about to end"], default = "none",
+      choices = P.SoundChoices(false),
+      button = { name = L["Test"], Click = function()
+        local choice = Q.DB()[END_SOUND_KEY]
+        if choice and choice ~= "none" then
+          P.Play(choice)
+        end
+      end },
+      Disabled = EndOff },
   },
 })

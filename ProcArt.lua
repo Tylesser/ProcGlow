@@ -465,6 +465,8 @@ local function Anchor()
   return anchor
 end
 
+A.FLASH_LOW, A.FLASH_TIME = 0.2, 0.125 -- the flash before a proc ends: down to 20 %, an eighth of a second each way
+
 local function Animate(piece)
   if type(piece.CreateAnimationGroup) ~= "function" then
     return
@@ -479,6 +481,9 @@ local function Animate(piece)
       piece:SetAlpha(1)
       if piece.pulse then
         piece.pulse:Play()
+      end
+      if piece.ending and piece.flash then
+        piece.flash:Play() -- about to end already as it came in
       end
     end)
     piece.fadeIn = fadeIn
@@ -497,6 +502,14 @@ local function Animate(piece)
       shrink:SetSmoothing("IN_OUT")
     end
     piece.pulse = pulse
+    -- about to end (ProcGlow's P.Endings, 2026-11-28): the piece flashes, bright to faint and back, four times a second
+    local flash = piece:CreateAnimationGroup()
+    flash:SetLooping("BOUNCE")
+    local blink = flash:CreateAnimation("Alpha")
+    blink:SetFromAlpha(1)
+    blink:SetToAlpha(A.FLASH_LOW)
+    blink:SetDuration(A.FLASH_TIME)
+    piece.flash = flash
     local fadeOut = piece:CreateAnimationGroup()
     local out = fadeOut:CreateAnimation("Alpha")
     out:SetFromAlpha(1)
@@ -651,6 +664,23 @@ local function Place(piece, art)
   return ok
 end
 
+-- The flash while its proc is about to end (not while it fades in: its end starts the flash; not while it leaves).
+local function SetFlash(piece, on)
+  piece.ending = on and true or nil
+  local flash = piece.flash
+  if not flash then
+    return
+  end
+  local playing = flash.IsPlaying and flash:IsPlaying()
+  if on and not playing and not piece.leaving and not (piece.fadeIn and piece.fadeIn.IsPlaying
+    and piece.fadeIn:IsPlaying()) then
+    flash:Play()
+  elseif not on and playing then
+    flash:Stop()
+  end
+end
+A.SetFlash = SetFlash
+
 local function ShowPiece(place, art, name, want)
   local piece = Piece(place)
   local again = piece:IsShown() and piece.key == name and not piece.leaving
@@ -668,12 +698,19 @@ local function ShowPiece(place, art, name, want)
     piece.fadeOut:Stop()
   end
   if again then
+    SetFlash(piece, want and want.ending)
     return piece
+  end
+  piece.ending = want and want.ending or nil
+  if piece.flash and piece.flash.Stop then
+    piece.flash:Stop()
   end
   piece:SetAlpha(piece.fadeIn and 0 or 1)
   piece:Show()
   if piece.fadeIn and piece.fadeIn.Play then
     piece.fadeIn:Play()
+  else
+    SetFlash(piece, piece.ending)
   end
   return piece
 end
@@ -683,8 +720,12 @@ local function HidePiece(piece)
     return
   end
   piece.leaving = true
+  piece.ending = nil
   if piece.fadeIn and piece.fadeIn.Stop then
     piece.fadeIn:Stop() -- else its end would start the pulse again
+  end
+  if piece.flash and piece.flash.Stop then
+    piece.flash:Stop()
   end
   if piece.pulse and piece.pulse.Pause then
     piece.pulse:Pause()
@@ -869,7 +910,7 @@ function A.Show(names)
       art = A.StageArt(art, extra.count, extra.stacks) or art -- (a Codex art step: the arcs so far)
     end
     list[#list + 1] = { art = art, name = name, count = extra and extra.count,
-      stacks = extra and extra.stacks, faint = extra and extra.faint }
+      stacks = extra and extra.stacks, faint = extra and extra.faint, ending = extra and extra.ending }
   end
   A.Place(list, wanted)
   if next(wanted) then
@@ -947,8 +988,9 @@ function A.BuildOn()
 end
 
 -- From ProcGlow's update: `order` = the proc names Codex lit, first started first; `build` = stacking procs still
--- building up ({ name, count, stacks }); `stacks` = [name] = { count, stacks } of the lit stacking ones.
-function A.Update(order, build, stacks)
+-- building up ({ name, count, stacks }); `stacks` = [name] = { count, stacks } of the lit stacking ones; `ending` =
+-- [name] = true for those in their last seconds (they flash).
+function A.Update(order, build, stacks, ending)
   if A.testing then
     return
   end
@@ -965,6 +1007,9 @@ function A.Update(order, build, stacks)
     local seen = stacks and stacks[entry.name]
     if seen then
       entry.count, entry.stacks = seen.count, seen.stacks
+    end
+    if ending and ending[entry.name] then
+      entry.ending = true
     end
   end
   for _, one in ipairs(build or {}) do

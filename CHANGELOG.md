@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.0
+
+- **Warning before a proc ends** (off until you switch it on, in the new **Ending soon** section): in a buff proc's last seconds (2 by default, 1 to 5) its glow pulses faster and its art flashes, with a sound if you pick one. It works for buff procs (Shadow Trance, Clearcasting, Heating Up, Missile Barrage, the seal echoes and your own procs), not for Overpower, Revenge and the other abilities that light up after a dodge or parry: the game gives no time for those. In a fight the game hides your buffs' times, so there it counts from when the proc lit, for buffs you track in the cooldown manager.
+
 ## 1.5.0
 
 - **One preview for the whole options page**: instead of a glow preview beside the glow style and one beside each per-ability list, a single preview shows a proc as it will look: its button with its glow, its art on its side or sides, and its art, side and glow style written under it, with Play. Hover or pick an ability in any list to see it there. It sits in a column beside the options, so it never covers them.

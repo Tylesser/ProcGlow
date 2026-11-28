@@ -188,6 +188,15 @@ T.Translations("deDE", {
   ["Glow: %s"] = "Leuchten: %s",
   ["Style, any proc"] = "Stil, jeder Proc",
   ["The art beside your character for each proc %s knows, then the styles any proc can use."] = "Die Grafik neben deinem Charakter für jeden Proc, den %s kennt, dann die Stile für jeden Proc.",
+  ["%d s"] = "%d s",
+  ["Ending soon"] = "Bald vorbei",
+  ["Warn when a proc is about to end"] = "Warnen, wenn ein Proc gleich endet",
+  ["In its last seconds the glow pulses faster and the art flashes."] = "In seinen letzten Sekunden pulsiert das Leuchten schneller und die Grafik blinkt.",
+  ["Only for buff procs such as Shadow Trance, Clearcasting, Heating Up, Missile Barrage and the seal echoes: Overpower, Revenge and the other abilities that light up after a dodge or parry have no time the game gives."] = "Nur für Procs durch Stärkungszauber wie Schattentrance, Freizaubern, Aufwärmen, Sperrfeuer und die Siegel-Echos: Überwältigen, Rache und die anderen Fähigkeiten, die nach einem Ausweichen oder Parieren aufleuchten, haben keine Zeit, die das Spiel angibt.",
+  ["In a fight the game hides your buffs' times: there it counts from when the proc lit, which works for buffs you track in the cooldown manager."] = "Im Kampf verbirgt das Spiel die Zeiten deiner Stärkungszauber: Dort zählt es ab dem Aufleuchten des Procs, was für Stärkungszauber funktioniert, die du im Abklingzeitenmanager verfolgst.",
+  ["Warn this long before it ends"] = "So lange vor dem Ende warnen",
+  ["Sound as it's about to end"] = "Klang kurz vor dem Ende",
+  ["Needs \"Warn when a proc is about to end\"."] = "Braucht „Warnen, wenn ein Proc gleich endet“.",
 })
 
 T.Translations("frFR", {
@@ -373,6 +382,15 @@ T.Translations("frFR", {
   ["Glow: %s"] = "Lueur : %s",
   ["Style, any proc"] = "Style, tout proc",
   ["The art beside your character for each proc %s knows, then the styles any proc can use."] = "L'illustration à côté de votre personnage pour chaque proc que %s connaît, puis les styles que tout proc peut utiliser.",
+  ["%d s"] = "%d s",
+  ["Ending soon"] = "Bientôt terminé",
+  ["Warn when a proc is about to end"] = "Avertir quand un proc va se terminer",
+  ["In its last seconds the glow pulses faster and the art flashes."] = "Dans ses dernières secondes, la lueur pulse plus vite et l'illustration clignote.",
+  ["Only for buff procs such as Shadow Trance, Clearcasting, Heating Up, Missile Barrage and the seal echoes: Overpower, Revenge and the other abilities that light up after a dodge or parry have no time the game gives."] = "Seulement pour les procs d'amélioration comme Transe de l'ombre, Idées claires, Réchauffement, Barrage de projectiles et les échos de sceau : Fulgurance, Vengeance et les autres techniques qui s'allument après une esquive ou une parade n'ont pas de durée donnée par le jeu.",
+  ["In a fight the game hides your buffs' times: there it counts from when the proc lit, which works for buffs you track in the cooldown manager."] = "En combat, le jeu cache la durée de vos améliorations : on compte alors à partir du moment où le proc s'est allumé, ce qui fonctionne pour les améliorations suivies dans le gestionnaire de temps de recharge.",
+  ["Warn this long before it ends"] = "Avertir autant de temps avant la fin",
+  ["Sound as it's about to end"] = "Son juste avant la fin",
+  ["Needs \"Warn when a proc is about to end\"."] = "Nécessite « Avertir quand un proc va se terminer ».",
 })
 
 T.Translations("esES", {
@@ -558,6 +576,15 @@ T.Translations("esES", {
   ["Glow: %s"] = "Brillo: %s",
   ["Style, any proc"] = "Estilo, cualquier proc",
   ["The art beside your character for each proc %s knows, then the styles any proc can use."] = "El arte junto a tu personaje para cada proc que %s conoce, y luego los estilos que puede usar cualquier proc.",
+  ["%d s"] = "%d s",
+  ["Ending soon"] = "A punto de acabar",
+  ["Warn when a proc is about to end"] = "Avisar cuando un proc esté a punto de acabar",
+  ["In its last seconds the glow pulses faster and the art flashes."] = "En sus últimos segundos el brillo pulsa más rápido y el arte parpadea.",
+  ["Only for buff procs such as Shadow Trance, Clearcasting, Heating Up, Missile Barrage and the seal echoes: Overpower, Revenge and the other abilities that light up after a dodge or parry have no time the game gives."] = "Solo para procs de beneficio como Trance de las Sombras, Conjuro libre, Calentamiento, Tromba de misiles y los ecos de sello: Abrumar, Revancha y las demás habilidades que se iluminan tras una esquiva o una parada no tienen un tiempo que dé el juego.",
+  ["In a fight the game hides your buffs' times: there it counts from when the proc lit, which works for buffs you track in the cooldown manager."] = "En combate el juego oculta el tiempo de tus beneficios: entonces cuenta desde que se iluminó el proc, lo que funciona con los beneficios que rastreas en el administrador de tiempos de reutilización.",
+  ["Warn this long before it ends"] = "Avisar con esta antelación",
+  ["Sound as it's about to end"] = "Sonido justo antes de acabar",
+  ["Needs \"Warn when a proc is about to end\"."] = "Necesita “Avisar cuando un proc esté a punto de acabar”.",
 })
 
 T.Translations("ruRU", {
@@ -743,6 +770,15 @@ T.Translations("ruRU", {
   ["Glow: %s"] = "Свечение: %s",
   ["Style, any proc"] = "Стиль, любой прок",
   ["The art beside your character for each proc %s knows, then the styles any proc can use."] = "Рисунки рядом с персонажем для каждого прока, известного %s, затем стили для любого прока.",
+  ["%d s"] = "%d с",
+  ["Ending soon"] = "Скоро закончится",
+  ["Warn when a proc is about to end"] = "Предупреждать, когда прок вот-вот закончится",
+  ["In its last seconds the glow pulses faster and the art flashes."] = "В последние секунды свечение пульсирует быстрее, а рисунок мигает.",
+  ["Only for buff procs such as Shadow Trance, Clearcasting, Heating Up, Missile Barrage and the seal echoes: Overpower, Revenge and the other abilities that light up after a dodge or parry have no time the game gives."] = "Только для проков-баффов, таких как Теневой транс, Ясность мысли, Разогрев, Заградительные стрелы и отголоски печатей: у Превосходства, Реванша и других способностей, которые загораются после уклонения или парирования, игра не сообщает время.",
+  ["In a fight the game hides your buffs' times: there it counts from when the proc lit, which works for buffs you track in the cooldown manager."] = "В бою игра скрывает время ваших баффов: тогда отсчёт идёт с момента, когда загорелся прок, — это работает для баффов, которые вы отслеживаете в менеджере восстановления.",
+  ["Warn this long before it ends"] = "Предупреждать за столько до конца",
+  ["Sound as it's about to end"] = "Звук перед окончанием",
+  ["Needs \"Warn when a proc is about to end\"."] = "Нужно «Предупреждать, когда прок вот-вот закончится».",
 })
 
 T.Translations("ptBR", {
@@ -928,4 +964,13 @@ T.Translations("ptBR", {
   ["Glow: %s"] = "Brilho: %s",
   ["Style, any proc"] = "Estilo, qualquer proc",
   ["The art beside your character for each proc %s knows, then the styles any proc can use."] = "A arte ao lado do seu personagem para cada proc que o %s conhece, depois os estilos que qualquer proc pode usar.",
+  ["%d s"] = "%d s",
+  ["Ending soon"] = "Acabando",
+  ["Warn when a proc is about to end"] = "Avisar quando um proc estiver para acabar",
+  ["In its last seconds the glow pulses faster and the art flashes."] = "Nos últimos segundos o brilho pulsa mais rápido e a arte pisca.",
+  ["Only for buff procs such as Shadow Trance, Clearcasting, Heating Up, Missile Barrage and the seal echoes: Overpower, Revenge and the other abilities that light up after a dodge or parry have no time the game gives."] = "Só para procs de bônus como Transe Sombrio, Abstração, Aquecendo, Salva de Mísseis e os ecos de selo: Subjugar, Revanche e as outras habilidades que acendem depois de uma esquiva ou um aparo não têm um tempo que o jogo informe.",
+  ["In a fight the game hides your buffs' times: there it counts from when the proc lit, which works for buffs you track in the cooldown manager."] = "Em combate o jogo esconde o tempo dos seus bônus: aí a contagem começa quando o proc acendeu, o que funciona para bônus que você monitora no gerenciador de recargas.",
+  ["Warn this long before it ends"] = "Avisar com esta antecedência",
+  ["Sound as it's about to end"] = "Som perto do fim",
+  ["Needs \"Warn when a proc is about to end\"."] = "Requer “Avisar quando um proc estiver para acabar”.",
 })
